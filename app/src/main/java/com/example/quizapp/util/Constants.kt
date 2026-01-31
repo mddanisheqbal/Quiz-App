@@ -1,0 +1,28 @@
+package com.example.quizapp.util
+
+object Constants {
+    // SharedPreferences Keys
+    const val PREFS_NAME = "quiz_app_prefs"
+    const val KEY_AUTH_TOKEN = "auth_token"
+    const val KEY_USER_ID = "user_id"
+    const val KEY_USER_EMAIL = "user_email"
+    const val KEY_IS_ADMIN = "is_admin"
+    const val KEY_IS_LOGGED_IN = "is_logged_in"
+
+    // Admin Credentials (Change these!)
+    const val ADMIN_EMAIL = "mddanisheqbal7667@gmail.com"
+    const val ADMIN_PASSWORD = "mrdAnishAdmin7782"
+
+    // Quiz Settings
+    const val POINTS_PER_CORRECT_ANSWER = 10
+
+    // Categories
+    const val CATEGORY_JAVA = "Java"
+    const val CATEGORY_PYTHON = "Python"
+    const val CATEGORY_KOTLIN = "Kotlin"
+    const val CATEGORY_CPP = "C++"
+    const val CATEGORY_C = "C"
+    const val CATEGORY_HTML = "HTML"
+    const val CATEGORY_CSS = "CSS"
+    const val CATEGORY_JS = "JavaScript"
+}
