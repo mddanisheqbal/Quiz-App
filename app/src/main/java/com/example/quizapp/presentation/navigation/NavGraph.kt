@@ -56,11 +56,12 @@ fun NavGraph(
             composable(Screen.Home.route) {
                 HomeScreen(
                     onNavigateToTopic = { categoryId, categoryName ->
-                        // Navigate directly to Quiz now
-                        navController.navigate(Screen.Quiz.createRoute(categoryId, categoryName))
+                        navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName))
                     },
                     onNavigateToQuiz = { categoryId, categoryName ->
-                        navController.navigate(Screen.Quiz.createRoute(categoryId, categoryName))
+                        // This might be used for categories without chapters, but based on request, 
+                        // we go to Chapters first.
+                        navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName))
                     },
                     onNavigateToHistory = { navController.navigate(Screen.History.route) },
                     onLogout = {
@@ -72,20 +73,42 @@ fun NavGraph(
             }
 
             composable(
-                route = Screen.Quiz.route,
+                route = Screen.Chapter.route,
                 arguments = listOf(
                     navArgument("categoryId") { type = NavType.StringType },
                     navArgument("categoryName") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
-                val quizViewModel: QuizViewModel = hiltViewModel(navController.getBackStackEntry("main_flow"))
                 val categoryId = backStackEntry.arguments?.getString("categoryId") ?: ""
                 val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
+                
+                ChapterScreen(
+                    categoryId = categoryId,
+                    categoryName = categoryName,
+                    onNavigateToQuiz = { catId, topicId, topicName ->
+                        navController.navigate(Screen.Quiz.createRoute(catId, topicId, topicName))
+                    },
+                    onNavigateBack = { navController.popBackStack() }
+                )
+            }
+
+            composable(
+                route = Screen.Quiz.route,
+                arguments = listOf(
+                    navArgument("categoryId") { type = NavType.StringType },
+                    navArgument("topicId") { type = NavType.StringType },
+                    navArgument("topicName") { type = NavType.StringType }
+                )
+            ) { backStackEntry ->
+                val quizViewModel: QuizViewModel = hiltViewModel(navController.getBackStackEntry("main_flow"))
+                val categoryId = backStackEntry.arguments?.getString("categoryId") ?: ""
+                val topicId = backStackEntry.arguments?.getString("topicId") ?: ""
+                val topicName = backStackEntry.arguments?.getString("topicName") ?: ""
 
                 QuizScreen(
                     categoryId = categoryId,
-                    topicId = "", // No topic ID needed anymore
-                    topicName = categoryName,
+                    topicId = topicId,
+                    topicName = topicName,
                     quizViewModel = quizViewModel,
                     onNavigateToResult = {
                         navController.navigate(Screen.Result.route) {

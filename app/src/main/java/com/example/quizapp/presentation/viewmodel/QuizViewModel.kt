@@ -28,6 +28,9 @@ class QuizViewModel @Inject constructor(
     private val _categories = MutableStateFlow<Resource<List<Category>>>(Resource.Loading())
     val categories: StateFlow<Resource<List<Category>>> = _categories
 
+    private val _topics = MutableStateFlow<Resource<List<Topic>>>(Resource.Loading())
+    val topics: StateFlow<Resource<List<Topic>>> = _topics
+
     private val _questions = MutableStateFlow<Resource<List<Question>>>(Resource.Loading())
     val questions: StateFlow<Resource<List<Question>>> = _questions
 
@@ -49,6 +52,8 @@ class QuizViewModel @Inject constructor(
     private var currentQuizId: String = ""
     private var currentCategoryId: String = ""
     private var currentCategoryName: String = ""
+    private var currentChapterId: String = ""
+    private var currentChapterName: String = ""
     private var quizStartTime: Long = 0
 
     fun loadCategories() {
@@ -59,7 +64,15 @@ class QuizViewModel @Inject constructor(
         }
     }
 
-    fun loadQuestions(categoryId: String, categoryName: String) {
+    fun loadTopics(categoryId: String) {
+        viewModelScope.launch {
+            _topics.value = Resource.Loading()
+            val result = quizRepository.getTopicsByCategory(categoryId)
+            _topics.value = result
+        }
+    }
+
+    fun loadQuestions(categoryId: String, chapterId: String, chapterName: String) {
         viewModelScope.launch {
             _questions.value = Resource.Loading()
             _userAnswers.value.clear()
@@ -69,11 +82,16 @@ class QuizViewModel @Inject constructor(
             _timeRemaining.value = -1
 
             currentCategoryId = categoryId
-            currentCategoryName = categoryName
+            currentChapterId = chapterId
+            currentChapterName = chapterName
             currentQuizId = UUID.randomUUID().toString()
             quizStartTime = System.currentTimeMillis()
 
-            val result = quizRepository.getQuestionsByCategory(categoryId)
+            val result = if (chapterId.isNotEmpty()) {
+                quizRepository.getQuestionsByChapter(chapterId = chapterId)
+            } else {
+                quizRepository.getQuestionsByCategory(categoryId)
+            }
             _questions.value = result
 
             if (result is Resource.Success) {
@@ -221,6 +239,8 @@ class QuizViewModel @Inject constructor(
         currentQuizId = ""
         currentCategoryId = ""
         currentCategoryName = ""
+        currentChapterId = ""
+        currentChapterName = ""
         quizStartTime = 0
     }
 }

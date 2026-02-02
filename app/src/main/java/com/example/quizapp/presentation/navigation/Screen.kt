@@ -5,8 +5,11 @@ sealed class Screen(val route: String) {
     object Login : Screen("login")
     object SignUp : Screen("signup")
     object Home : Screen("home")
-    object Quiz : Screen("quiz/{categoryId}/{categoryName}") {
-        fun createRoute(categoryId: String, categoryName: String) = "quiz/$categoryId/$categoryName"
+    object Chapter : Screen("chapter/{categoryId}/{categoryName}") {
+        fun createRoute(categoryId: String, categoryName: String) = "chapter/$categoryId/$categoryName"
+    }
+    object Quiz : Screen("quiz/{categoryId}/{topicId}/{topicName}") {
+        fun createRoute(categoryId: String, topicId: String, topicName: String) = "quiz/$categoryId/$topicId/$topicName"
     }
     object Result : Screen("result")
     object History : Screen("history")

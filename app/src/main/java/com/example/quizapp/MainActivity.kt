@@ -29,7 +29,7 @@ class MainActivity : ComponentActivity() {
     private val viewModel by viewModels<AdminViewModel>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
-//        val splashScreen = installSplashScreen()
+        val splashScreen = installSplashScreen()
         super.onCreate(savedInstanceState)
 
         setContent {
@@ -41,7 +41,7 @@ class MainActivity : ComponentActivity() {
                     viewModel.loadCategories()
                 }
 
-//                splashScreen.setKeepOnScreenCondition { isLoading }
+                splashScreen.setKeepOnScreenCondition { isLoading }
 
                 LaunchedEffect(categoriesState) {
                     if (categoriesState is Resource.Success<*> || categoriesState is Resource.Error<*>) {

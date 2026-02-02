@@ -36,6 +36,8 @@ fun ManageQuestionsScreen(
     var showEditDialog by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
     var selectedQuestion by remember { mutableStateOf<Question?>(null) }
+    var selectedChapterId by remember { mutableStateOf("") }
+
 
     LaunchedEffect(categoryId) {
         adminViewModel.loadQuestions(categoryId)
@@ -540,17 +542,26 @@ fun QuestionDialog(
                         val newQuestion = Question(
                             id = question?.id ?: UUID.randomUUID().toString(),
                             categoryId = categoryId,
+                            chapterId = question?.chapterId ?: "default_chapter",
                             questionText = questionText,
-                            questionType = questionType,
                             options = if (questionType == QuestionType.MULTIPLE_CHOICE) {
-                                options.lines().filter { it.isNotBlank() }
-                            } else emptyList(),
+                                options
+                                    .lines()
+                                    .map { it.trim() }
+                                    .filter { it.isNotEmpty() }
+                            } else {
+                                emptyList()
+                            },
                             correctAnswer = correctAnswer,
                             explanation = explanation,
                             difficulty = difficulty,
+                            questionType = questionType,
                             timeLimit = timeLimit.toIntOrNull() ?: 30,
-                            points = points.toIntOrNull() ?: 10
+                            points = points.toIntOrNull() ?: 10,
+                            createdAt = question?.createdAt ?: System.currentTimeMillis().toString()
                         )
+
+
                         onConfirm(newQuestion)
                     }
                 },

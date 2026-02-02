@@ -3,14 +3,14 @@ package com.example.quizapp.data.model
 data class Question(
     val id: String = "",
     val categoryId: String = "",
-    val topicId: String? = null,
+    val chapterId: String = "",
     val questionText: String = "",
-    val questionType: QuestionType = QuestionType.MULTIPLE_CHOICE,
     val options: List<String> = emptyList(),
     val correctAnswer: String = "",
-    val explanation: String? = null,
-    val difficulty: Difficulty = Difficulty.MEDIUM,
-    val timeLimit: Int = 30, // seconds
+    val explanation: String = "",
+    val difficulty: Difficulty = Difficulty.EASY,
+    val questionType: QuestionType = QuestionType.MULTIPLE_CHOICE,
+    val timeLimit: Int = 30,
     val points: Int = 10,
     val createdAt: String = ""
 )

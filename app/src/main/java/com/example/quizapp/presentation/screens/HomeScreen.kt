@@ -132,11 +132,8 @@ fun HomeScreen(
                                 CategoryCard(
                                     category = category,
                                     onClick = {
-                                        if (category.topicCount > 0) {
-                                            onNavigateToTopic(category.id, category.name)
-                                        } else {
-                                            onNavigateToQuiz(category.id, category.name)
-                                        }
+                                        // Redesigned Flow: Always go to Topic (Chapter) screen first
+                                        onNavigateToTopic(category.id, category.name)
                                     }
                                 )
                             }
@@ -264,7 +261,7 @@ fun CategoryCard(
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = if (category.topicCount > 0) "${category.topicCount} Topics" else "${category.questionCount} Questions",
+                        text = "${category.topicCount} Topics",
                         fontSize = 14.sp,
                         color = Color.White.copy(alpha = 0.9f)
                     )

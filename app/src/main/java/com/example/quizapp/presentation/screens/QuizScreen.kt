@@ -36,7 +36,7 @@ import kotlinx.coroutines.launch
 @Composable
 fun QuizScreen(
     categoryId: String,
-    topicId: String, // Parameter kept for nav compatibility but unused
+    topicId: String,
     topicName: String,
     onNavigateToResult: () -> Unit,
     onNavigateBack: () -> Unit,
@@ -56,8 +56,8 @@ fun QuizScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
 
-    LaunchedEffect(categoryId, topicName) {
-        quizViewModel.loadQuestions(categoryId, topicName)
+    LaunchedEffect(categoryId, topicId, topicName) {
+        quizViewModel.loadQuestions(categoryId, topicId, topicName)
     }
 
     LaunchedEffect(timerRunning, timeRemaining) {

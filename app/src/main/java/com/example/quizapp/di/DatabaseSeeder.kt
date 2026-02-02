@@ -3,17 +3,9 @@ package com.example.quizapp.di
 import android.content.Context
 import android.util.Log
 import com.example.quizapp.data.model.Category
-import com.example.quizapp.data.model.Difficulty
 import com.example.quizapp.data.model.Question
 import com.example.quizapp.data.model.Topic
-import com.example.quizapp.di.questions.getCppQuestions
-import com.example.quizapp.di.questions.getCQuestions
-import com.example.quizapp.di.questions.getCssQuestions
-import com.example.quizapp.di.questions.getHtmlQuestions
-import com.example.quizapp.di.questions.getJavaQuestions
-import com.example.quizapp.di.questions.getJavaScriptQuestions
-import com.example.quizapp.di.questions.getKotlinQuestions
-import com.example.quizapp.di.questions.getPythonQuestions
+import com.example.quizapp.di.questions.*
 import com.google.firebase.firestore.FirebaseFirestore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
@@ -21,9 +13,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.text.SimpleDateFormat
-import java.util.Date
-import java.util.Locale
-import java.util.UUID
+import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -35,103 +25,205 @@ class DatabaseSeeder @Inject constructor(
     private val firestore = FirebaseFirestore.getInstance()
 
     fun seedDatabaseIfNeeded() {
+        val prefs = context.getSharedPreferences("quiz_prefs", Context.MODE_PRIVATE)
+        val isSeeded = prefs.getBoolean("database_seeded_v10", false)
+
+        if (isSeeded) {
+            Log.d("DatabaseSeeder", "Database already seeded. Skipping.")
+            return
+        }
+
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d("DatabaseSeeder", "FORCE MODE: Starting...")
-                clearDatabase()
-                seedDataSafe()
-                Log.d("DatabaseSeeder", "FORCE MODE: Completed.")
+                Log.d("DatabaseSeeder", "Starting database seeding...")
+                seedDatabase()
+                prefs.edit().putBoolean("database_seeded_v10", true).apply()
+                Log.d("DatabaseSeeder", "Database seeding completed.")
             } catch (e: Exception) {
-                Log.e("DatabaseSeeder", "Critical Error in Seeder", e)
+                Log.e("DatabaseSeeder", "Seeding failed", e)
             }
         }
     }
 
-    private suspend fun clearDatabase() {
-        val collections = listOf("questions", "topics", "categories")
-        for (path in collections) {
-            val snapshot = firestore.collection(path).get().await()
-            snapshot.documents.chunked(400).forEach { chunk ->
-                val batch = firestore.batch()
-                chunk.forEach { batch.delete(it.reference) }
-                batch.commit().await()
-            }
-        }
-        Log.d("DatabaseSeeder", "Database Cleared.")
-    }
+    private suspend fun seedDatabase() {
+        val createdAt = SimpleDateFormat(
+            "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+            Locale.getDefault()
+        ).format(Date())
 
-    private suspend fun seedDataSafe() {
-        val sdf = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
-        val createdAt = sdf.format(Date())
-        val categories = getCategories()
+        val categories = listOf(
+            Category("c", "C"),
+            Category("cpp", "C++"),
+            Category("java", "Java"),
+            Category("python", "Python"),
+            Category("kotlin", "Kotlin"),
+            Category("html", "HTML"),
+            Category("css", "CSS"),
+            Category("javascript", "JavaScript")
+        )
 
-        categories.forEach { category ->
-            try {
-                Log.d("DatabaseSeeder", "Starting Category: ${category.name}")
+        for (category in categories) {
 
-                val catRef = firestore.collection("categories").document(category.id)
-                catRef.set(category).await()
+            // 1️⃣ Save category
+            firestore.collection("categories")
+                .document(category.id)
+                .set(category)
+                .await()
 
-                val topic = Topic(
-                    id = "${category.id}_general",
-                    name = "General ${category.name}",
+            // 2️⃣ Create chapters (Topics)
+            val chapters = getChapterNames(category.id).mapIndexed { index, name ->
+                Topic(
+                    id = "${category.id}_${slug(name)}",
+                    name = name,
                     categoryId = category.id,
-                    order = 1
+                    order = index + 1,
+                    questionCount = 0
                 )
-                
-                val questions = getQuestionsForCategory(category.id, topic.id, createdAt)
+            }
 
-                Log.d("DatabaseSeeder", "${category.name} Questions Found: ${questions.size}")
+            chapters.forEach {
+                firestore.collection("topics")
+                    .document(it.id)
+                    .set(it)
+                    .await()
+            }
 
-                // Save single general topic
-                val topicRef = firestore.collection("topics").document(topic.id)
-                firestore.collection("topics").document(topic.id).set(topic.copy(questionCount = questions.size)).await()
+            // 3️⃣ Load raw questions
+            val rawQuestions = getQuestions(category.id, createdAt)
+            if (rawQuestions.isEmpty()) continue
 
-                // Save Questions
+            // 4️⃣ Distribute questions evenly across chapters
+            val distributed = distributeQuestions(rawQuestions, chapters)
+
+            // 5️⃣ Save questions with FIXED chapterId
+            var totalQuestions = 0
+
+            distributed.forEach { (chapterId, questions) ->
+                totalQuestions += questions.size
+
                 if (questions.isNotEmpty()) {
                     questions.chunked(300).forEach { chunk ->
                         val batch = firestore.batch()
                         chunk.forEach { q ->
-                            batch.set(firestore.collection("questions").document(q.id), q)
+                            val fixed = q.copy(
+                                categoryId = category.id,
+                                chapterId = chapterId
+                            )
+                            batch.set(
+                                firestore.collection("questions").document(fixed.id),
+                                fixed
+                            )
                         }
                         batch.commit().await()
                     }
                 }
 
-                // Update Category Counts
-                catRef.update(mapOf(
-                    "topicCount" to 1,
-                    "questionCount" to questions.size
-                )).await()
-
-                Log.d("DatabaseSeeder", "Completed Category: ${category.name}")
-
-            } catch (e: Exception) {
-                Log.e("DatabaseSeeder", "FAILED to seed ${category.name}. Skipping...", e)
+                // update chapter count
+                firestore.collection("topics")
+                    .document(chapterId)
+                    .update("questionCount", questions.size)
+                    .await()
             }
+
+            // 6️⃣ Update category count
+            firestore.collection("categories")
+                .document(category.id)
+                .update(
+                    mapOf(
+                        "topicCount" to chapters.size,
+                        "questionCount" to totalQuestions
+                    )
+                )
+                .await()
         }
     }
 
-    private fun getCategories(): List<Category> = listOf(
-        Category(id = "c", name = "C"), Category(id = "cpp", name = "C++"),
-        Category(id = "css", name = "CSS"), Category(id = "html", name = "HTML"),
-        Category(id = "java", name = "Java"), Category(id = "javascript", name = "JavaScript"),
-        Category(id = "kotlin", name = "Kotlin"), Category(id = "python", name = "Python")
-    )
+    // ---------------- HELPERS ----------------
 
-    private fun getQuestionsForCategory(categoryId: String, topicId: String, createdAt: String): List<Question> {
-        val questions = when (categoryId) {
-            "c" -> getCQuestions(categoryId, createdAt)
-            "cpp" -> getCppQuestions(categoryId, createdAt)
-            "css" -> getCssQuestions(categoryId, createdAt)
-            "html" -> getHtmlQuestions(categoryId, createdAt)
-            "java" -> getJavaQuestions(categoryId, createdAt)
-            "javascript" -> getJavaScriptQuestions(categoryId, createdAt)
-            "kotlin" -> getKotlinQuestions(categoryId, createdAt)
-            "python" -> getPythonQuestions(categoryId, createdAt)
+    private fun distributeQuestions(
+        questions: List<Question>,
+        chapters: List<Topic>
+    ): Map<String, List<Question>> {
+
+        val map = mutableMapOf<String, MutableList<Question>>()
+        chapters.forEach { map[it.id] = mutableListOf() }
+
+        questions.forEachIndexed { index, q ->
+            val chapter = chapters[index % chapters.size]
+            map[chapter.id]!!.add(q)
+        }
+
+        return map
+    }
+
+    private fun slug(text: String): String =
+        text.lowercase()
+            .replace("&", "and")
+            .replace("[^a-z0-9]+".toRegex(), "_")
+            .trim('_')
+
+    private fun getQuestions(languageId: String, createdAt: String): List<Question> =
+        when (languageId) {
+            "c" -> getCQuestions(languageId, createdAt)
+            "cpp" -> getCppQuestions(languageId, createdAt)
+            "java" -> getJavaQuestions(languageId, createdAt)
+            "python" -> getPythonQuestions(languageId, createdAt)
+            "kotlin" -> getKotlinQuestions(languageId, createdAt)
+            "html" -> getHtmlQuestions(languageId, createdAt)
+            "css" -> getCssQuestions(languageId, createdAt)
+            "javascript" -> getJavaScriptQuestions(languageId, createdAt)
             else -> emptyList()
         }
-        
-        return questions.map { it.copy(topicId = topicId) }
-    }
+
+    private fun getChapterNames(languageId: String): List<String> =
+        when (languageId) {
+            "c" -> listOf(
+                "Basics of C", "Data Types & Variables", "Operators & Expressions",
+                "Conditional Statements", "Loops", "Arrays", "Strings", "Functions",
+                "Pointers", "Structures & Unions", "File Handling", "Dynamic Memory Allocation"
+            )
+            "cpp" -> listOf(
+                "Basics of C++", "Data Types & Variables", "Control Statements",
+                "Functions", "OOP Concepts", "Constructors & Destructors",
+                "Inheritance", "Polymorphism", "Templates", "STL",
+                "Exception Handling", "File Handling"
+            )
+            "java" -> listOf(
+                "Java Basics", "JVM & JDK", "Data Types & Variables",
+                "Control Statements", "OOP Concepts",
+                "Inheritance & Polymorphism", "Interfaces & Abstract Classes",
+                "Exception Handling", "Collections Framework",
+                "Multithreading", "File Handling", "Java 8 Features"
+            )
+            "python" -> listOf(
+                "Python Basics", "Variables & Data Types", "Operators",
+                "Conditional Statements", "Loops", "Lists & Tuples",
+                "Sets & Dictionaries", "Functions",
+                "Modules & Packages", "File Handling",
+                "Exception Handling", "OOP in Python"
+            )
+            "kotlin" -> listOf(
+                "Kotlin Basics", "Variables & Data Types", "Control Flow",
+                "Functions", "Null Safety", "Classes & Objects",
+                "Inheritance", "Data Classes", "Collections",
+                "Lambdas", "Coroutines", "Android Basics"
+            )
+            "html" -> listOf(
+                "Introduction to HTML", "HTML Structure", "Text Formatting",
+                "Links & Images", "Lists", "Tables", "Forms",
+                "Semantic HTML", "Multimedia", "HTML5 Features"
+            )
+            "css" -> listOf(
+                "Introduction to CSS", "CSS Selectors", "Colors & Backgrounds",
+                "Box Model", "Text & Fonts", "Display & Position",
+                "Flexbox", "Grid", "Responsive Design", "Animations & Transitions"
+            )
+            "javascript" -> listOf(
+                "JavaScript Basics", "Variables & Data Types", "Operators",
+                "Conditional Statements", "Loops", "Functions",
+                "Arrays & Objects", "DOM Manipulation", "Events",
+                "ES6 Features", "Async JavaScript", "Error Handling"
+            )
+            else -> emptyList()
+        }
 }
