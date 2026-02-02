@@ -26,7 +26,7 @@ class DatabaseSeeder @Inject constructor(
 
     fun seedDatabaseIfNeeded() {
         val prefs = context.getSharedPreferences("quiz_prefs", Context.MODE_PRIVATE)
-        val isSeeded = prefs.getBoolean("database_seeded_v10", false)
+        val isSeeded = prefs.getBoolean("database_seeded_v15", false)
 
         if (isSeeded) {
             Log.d("DatabaseSeeder", "Database already seeded. Skipping.")
@@ -37,7 +37,7 @@ class DatabaseSeeder @Inject constructor(
             try {
                 Log.d("DatabaseSeeder", "Starting database seeding...")
                 seedDatabase()
-                prefs.edit().putBoolean("database_seeded_v10", true).apply()
+                prefs.edit().putBoolean("database_seeded_v15", true).apply()
                 Log.d("DatabaseSeeder", "Database seeding completed.")
             } catch (e: Exception) {
                 Log.e("DatabaseSeeder", "Seeding failed", e)
@@ -70,7 +70,7 @@ class DatabaseSeeder @Inject constructor(
                 .set(category)
                 .await()
 
-            // 2️⃣ Create chapters (Topics)
+            // 2️⃣ Create chapters (topics)
             val chapters = getChapterNames(category.id).mapIndexed { index, name ->
                 Topic(
                     id = "${category.id}_${slug(name)}",
@@ -81,57 +81,47 @@ class DatabaseSeeder @Inject constructor(
                 )
             }
 
-            chapters.forEach {
+            chapters.forEach { topic ->
                 firestore.collection("topics")
-                    .document(it.id)
-                    .set(it)
+                    .document(topic.id)
+                    .set(topic)
                     .await()
             }
 
-            // 3️⃣ Load raw questions
-            val rawQuestions = getQuestions(category.id, createdAt)
-            if (rawQuestions.isEmpty()) continue
+            // 3️⃣ Load questions (DO NOT MODIFY chapterId)
+            val questions = getQuestions(category.id, createdAt)
+            if (questions.isEmpty()) continue
 
-            // 4️⃣ Distribute questions evenly across chapters
-            val distributed = distributeQuestions(rawQuestions, chapters)
-
-            // 5️⃣ Save questions with FIXED chapterId
-            var totalQuestions = 0
-
-            distributed.forEach { (chapterId, questions) ->
-                totalQuestions += questions.size
-
-                if (questions.isNotEmpty()) {
-                    questions.chunked(300).forEach { chunk ->
-                        val batch = firestore.batch()
-                        chunk.forEach { q ->
-                            val fixed = q.copy(
-                                categoryId = category.id,
-                                chapterId = chapterId
-                            )
-                            batch.set(
-                                firestore.collection("questions").document(fixed.id),
-                                fixed
-                            )
-                        }
-                        batch.commit().await()
-                    }
+            // 4️⃣ Save questions
+            questions.chunked(300).forEach { chunk ->
+                val batch = firestore.batch()
+                chunk.forEach { q ->
+                    batch.set(
+                        firestore.collection("questions").document(q.id),
+                        q
+                    )
                 }
+                batch.commit().await()
+            }
 
-                // update chapter count
+            // 5️⃣ Update chapter question counts
+            val chapterCounts = questions.groupBy { it.chapterId }
+
+            for (topic in chapters) {
+                val count = chapterCounts[topic.id]?.size ?: 0
                 firestore.collection("topics")
-                    .document(chapterId)
-                    .update("questionCount", questions.size)
+                    .document(topic.id)
+                    .update("questionCount", count)
                     .await()
             }
 
-            // 6️⃣ Update category count
+            // 6️⃣ Update category counts
             firestore.collection("categories")
                 .document(category.id)
                 .update(
                     mapOf(
                         "topicCount" to chapters.size,
-                        "questionCount" to totalQuestions
+                        "questionCount" to questions.size
                     )
                 )
                 .await()
@@ -139,22 +129,6 @@ class DatabaseSeeder @Inject constructor(
     }
 
     // ---------------- HELPERS ----------------
-
-    private fun distributeQuestions(
-        questions: List<Question>,
-        chapters: List<Topic>
-    ): Map<String, List<Question>> {
-
-        val map = mutableMapOf<String, MutableList<Question>>()
-        chapters.forEach { map[it.id] = mutableListOf() }
-
-        questions.forEachIndexed { index, q ->
-            val chapter = chapters[index % chapters.size]
-            map[chapter.id]!!.add(q)
-        }
-
-        return map
-    }
 
     private fun slug(text: String): String =
         text.lowercase()
