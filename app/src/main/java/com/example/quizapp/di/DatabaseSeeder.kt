@@ -26,7 +26,7 @@ class DatabaseSeeder @Inject constructor(
 
     fun seedDatabaseIfNeeded() {
         val prefs = context.getSharedPreferences("quiz_prefs", Context.MODE_PRIVATE)
-        val isSeeded = prefs.getBoolean("database_seeded_v16", false)
+        val isSeeded = prefs.getBoolean("database_seeded_v20", false)
 
         if (isSeeded) {
             Log.d("DatabaseSeeder", "Database already seeded. Skipping.")
@@ -37,7 +37,7 @@ class DatabaseSeeder @Inject constructor(
             try {
                 Log.d("DatabaseSeeder", "Starting database seeding...")
                 seedDatabase()
-                prefs.edit().putBoolean("database_seeded_v16", true).apply()
+                prefs.edit().putBoolean("database_seeded_v20", true).apply()
                 Log.d("DatabaseSeeder", "Database seeding completed.")
             } catch (e: Exception) {
                 Log.e("DatabaseSeeder", "Seeding failed", e)
