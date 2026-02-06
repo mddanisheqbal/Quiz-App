@@ -32,6 +32,6 @@ val GradientEnd = Color(0xFF2575FC)
 
 // Category Colors
 val JavaColor = Color(0xFFE57373)
-val PythonColor = Color(0xFF81C784)
-val KotlinColor = Color(0xFF9575CD)
+val PythonColor = Color(0xFF673AB7)
+val KotlinColor = Color(0xFF009688)
 val CppColor = Color(0xFF64B5F6)

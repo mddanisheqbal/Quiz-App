@@ -210,6 +210,10 @@ fun CategoryCard(
         "Python" -> PythonColor
         "Kotlin" -> KotlinColor
         "C++" -> CppColor
+        "C" -> Color(0xFF00599C)
+        "HTML" -> Color(0xFFE3BA26)
+        "CSS" -> Color(0xFFB62215)
+        "JavaScript" -> Color(0xFF1E42F7)
         else -> MaterialTheme.colorScheme.primary
     }
 
@@ -241,12 +245,17 @@ fun CategoryCard(
             ) {
                 Icon(
                     imageVector = when (category.name) {
-                        "Java" -> Icons.Default.Code
-                        "Python" -> Icons.Default.Computer
-                        "Kotlin" -> Icons.Default.Android
+                        "C" -> Icons.Default.Memory
                         "C++" -> Icons.Default.Terminal
+                        "Java" -> Icons.Default.Coffee
+                        "Python" -> Icons.Default.Code
+                        "HTML" -> Icons.Default.Language
+                        "Kotlin" -> Icons.Default.Android
+                        "CSS" -> Icons.Default.Web
+
+                        "JavaScript" -> Icons.Default.Bolt
                         else -> Icons.Default.Quiz
-                    },
+                },
                     contentDescription = null,
                     modifier = Modifier.size(48.dp),
                     tint = Color.White
