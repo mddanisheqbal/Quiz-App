@@ -5,16 +5,14 @@ import com.example.quizapp.data.model.Question
 import com.example.quizapp.data.model.QuestionType
 
 /* ===============================
-   CHAPTER IDS
+   CHAPTER IDS (MUST MATCH TOPICS)
    =============================== */
 
-const val JS_BASICS = "js_basics"
-const val JS_CONTROL_FLOW = "js_control_flow"
-const val JS_FUNCTIONS = "js_functions"
-const val JS_ARRAYS_OBJECTS = "js_arrays_objects"
-const val JS_ASYNC = "js_async"
-const val JS_ES6 = "js_es6"
-const val JS_ADVANCED = "js_advanced"
+const val JS_BASICS = "javascript_javascript_basics"
+const val JS_FUNCTIONS = "javascript_functions"
+const val JS_ARRAYS_OBJECTS = "javascript_arrays_and_objects"
+const val JS_ASYNC = "javascript_async_javascript"
+const val JS_ES6 = "javascript_es6_features"
 
 /* ===============================
    HELPER
@@ -85,37 +83,6 @@ fun getJavaScriptQuestions(
             ),
             correctAnswer = "alert('Hello World')",
             explanation = "alert() displays a popup dialog.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        )
-    )
-
-    /* ---------- CONTROL FLOW ---------- */
-    val controlFlow = listOf(
-        jsQuestion(
-            id = "js_flow_001",
-            categoryId = categoryId,
-            chapterId = JS_CONTROL_FLOW,
-            questionText = "How do you write an IF statement in JavaScript?",
-            options = listOf(
-                "if i = 5",
-                "if (i == 5)",
-                "if i == 5 then",
-                "if i = 5 then"
-            ),
-            correctAnswer = "if (i == 5)",
-            explanation = "JavaScript conditions use parentheses.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        ),
-        jsQuestion(
-            id = "js_flow_002",
-            categoryId = categoryId,
-            chapterId = JS_CONTROL_FLOW,
-            questionText = "Which keyword is used to stop a loop?",
-            options = listOf("exit", "stop", "break", "return"),
-            correctAnswer = "break",
-            explanation = "break exits the loop immediately.",
             difficulty = Difficulty.EASY,
             createdAt = createdAt
         )
@@ -260,49 +227,5 @@ fun getJavaScriptQuestions(
         )
     )
 
-    /* ---------- ADVANCED ---------- */
-    val advanced = listOf(
-        jsQuestion(
-            id = "js_adv_001",
-            categoryId = categoryId,
-            chapterId = JS_ADVANCED,
-            questionText = "What is the Event Loop?",
-            options = listOf(
-                "UI loop",
-                "Async task manager",
-                "Rendering engine",
-                "Thread pool"
-            ),
-            correctAnswer = "Async task manager",
-            explanation = "Event loop manages async execution.",
-            difficulty = Difficulty.HARD,
-            createdAt = createdAt,
-            points = 25
-        ),
-        jsQuestion(
-            id = "js_adv_002",
-            categoryId = categoryId,
-            chapterId = JS_ADVANCED,
-            questionText = "What is Prototype Pollution?",
-            options = listOf(
-                "Memory leak",
-                "Security vulnerability",
-                "Syntax error",
-                "Garbage collection issue"
-            ),
-            correctAnswer = "Security vulnerability",
-            explanation = "Prototype pollution can lead to attacks.",
-            difficulty = Difficulty.HARD,
-            createdAt = createdAt,
-            points = 25
-        )
-    )
-
-    return basics +
-            controlFlow +
-            functions +
-            arraysObjects +
-            async +
-            es6 +
-            advanced
+    return basics + functions + arraysObjects + async + es6
 }

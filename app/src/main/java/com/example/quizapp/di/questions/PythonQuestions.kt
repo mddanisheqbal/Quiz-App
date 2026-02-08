@@ -5,16 +5,15 @@ import com.example.quizapp.data.model.Question
 import com.example.quizapp.data.model.QuestionType
 
 /* ===============================
-   CHAPTER IDS
+   CHAPTER IDS (MUST MATCH TOPICS)
    =============================== */
 
-const val PY_BASICS = "python_basics"
-const val PY_CONTROL_FLOW = "python_control_flow"
+const val PY_BASICS = "python_python_basics"
+const val PY_VARS_DATA_TYPES = "python_variables_and_data_types"
+const val PY_OPERATORS = "python_operators"
 const val PY_FUNCTIONS = "python_functions"
-const val PY_COLLECTIONS = "python_collections"
-const val PY_OOP = "python_oop"
-const val PY_EXCEPTIONS = "python_exceptions"
-const val PY_ADVANCED = "python_advanced"
+const val PY_FILE_HANDLING = "python_file_handling"
+const val PY_OOP = "python_oop_in_python"
 
 /* ===============================
    HELPER FUNCTION
@@ -85,27 +84,27 @@ fun getPythonQuestions(
         )
     )
 
-    /* ---------- CONTROL FLOW ---------- */
-    val controlFlow = listOf(
+    /* ---------- VARIABLES & DATA TYPES ---------- */
+    val vars = listOf(
         pythonQuestion(
-            id = "py_flow_001",
+            id = "py_col_001",
             categoryId = categoryId,
-            chapterId = PY_CONTROL_FLOW,
-            questionText = "Which keyword is used for conditional execution?",
-            options = listOf("check", "if", "case", "when"),
-            correctAnswer = "if",
-            explanation = "if is used to execute code conditionally.",
+            chapterId = PY_VARS_DATA_TYPES,
+            questionText = "Which collection stores unique values?",
+            options = listOf("List", "Tuple", "Set", "Dictionary"),
+            correctAnswer = "Set",
+            explanation = "Sets automatically remove duplicates.",
             difficulty = Difficulty.EASY,
             createdAt = createdAt
         ),
         pythonQuestion(
-            id = "py_flow_002",
+            id = "py_col_002",
             categoryId = categoryId,
-            chapterId = PY_CONTROL_FLOW,
-            questionText = "Which keyword exits a loop completely?",
-            options = listOf("stop", "exit", "break", "continue"),
-            correctAnswer = "break",
-            explanation = "break immediately exits the loop.",
+            chapterId = PY_VARS_DATA_TYPES,
+            questionText = "Which method adds an element to the end of a list?",
+            options = listOf("add()", "insert()", "append()", "push()"),
+            correctAnswer = "append()",
+            explanation = "append() adds an item at the end of the list.",
             difficulty = Difficulty.EASY,
             createdAt = createdAt
         )
@@ -137,32 +136,6 @@ fun getPythonQuestions(
             options = listOf("send", "give", "return", "exit"),
             correctAnswer = "return",
             explanation = "return sends a value back to the caller.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        )
-    )
-
-    /* ---------- COLLECTIONS ---------- */
-    val collections = listOf(
-        pythonQuestion(
-            id = "py_col_001",
-            categoryId = categoryId,
-            chapterId = PY_COLLECTIONS,
-            questionText = "Which collection stores unique values?",
-            options = listOf("List", "Tuple", "Set", "Dictionary"),
-            correctAnswer = "Set",
-            explanation = "Sets automatically remove duplicates.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        ),
-        pythonQuestion(
-            id = "py_col_002",
-            categoryId = categoryId,
-            chapterId = PY_COLLECTIONS,
-            questionText = "Which method adds an element to the end of a list?",
-            options = listOf("add()", "insert()", "append()", "push()"),
-            correctAnswer = "append()",
-            explanation = "append() adds an item at the end of the list.",
             difficulty = Difficulty.EASY,
             createdAt = createdAt
         )
@@ -200,39 +173,12 @@ fun getPythonQuestions(
         )
     )
 
-    /* ---------- EXCEPTIONS ---------- */
-    val exceptions = listOf(
-        pythonQuestion(
-            id = "py_exc_001",
-            categoryId = categoryId,
-            chapterId = PY_EXCEPTIONS,
-            questionText = "How do you handle errors in Python?",
-            options = listOf("try-catch", "try-except", "do-except", "error-handle"),
-            correctAnswer = "try-except",
-            explanation = "Python uses try-except blocks.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        ),
-        pythonQuestion(
-            id = "py_exc_002",
-            categoryId = categoryId,
-            chapterId = PY_EXCEPTIONS,
-            questionText = "Which block always executes?",
-            options = listOf("catch", "else", "finally", "always"),
-            correctAnswer = "finally",
-            explanation = "finally runs regardless of errors.",
-            difficulty = Difficulty.MEDIUM,
-            createdAt = createdAt,
-            points = 15
-        )
-    )
-
     /* ---------- ADVANCED ---------- */
     val advanced = listOf(
         pythonQuestion(
             id = "py_adv_001",
             categoryId = categoryId,
-            chapterId = PY_ADVANCED,
+            chapterId = PY_BASICS, // Relocated or updated to match a category
             questionText = "What is a generator?",
             options = listOf(
                 "A list builder",
@@ -249,7 +195,7 @@ fun getPythonQuestions(
         pythonQuestion(
             id = "py_adv_002",
             categoryId = categoryId,
-            chapterId = PY_ADVANCED,
+            chapterId = PY_BASICS, // Relocated or updated
             questionText = "What does the GIL do?",
             options = listOf(
                 "Improves threading speed",
@@ -265,11 +211,5 @@ fun getPythonQuestions(
         )
     )
 
-    return basics +
-            controlFlow +
-            functions +
-            collections +
-            oop +
-            exceptions +
-            advanced
+    return basics + vars + functions + oop + advanced
 }

@@ -8,10 +8,16 @@ import com.example.quizapp.data.model.QuestionType
    CHAPTER IDS (MUST MATCH TOPICS)
    =============================== */
 
-const val HTML_BASICS = "html_basics"
+const val HTML_INTRO = "html_introduction_to_html"
+const val HTML_STRUCTURE = "html_html_structure"
+const val HTML_TEXT = "html_text_formatting"
+const val HTML_LINKS = "html_links_and_images"
+const val HTML_LISTS = "html_lists"
+const val HTML_TABLES = "html_tables"
 const val HTML_FORMS = "html_forms"
-const val HTML_MEDIA = "html_media"
-const val HTML_ADVANCED = "html_advanced"
+const val HTML_SEMANTIC = "html_semantic_html"
+const val HTML_MULTIMEDIA = "html_multimedia"
+const val HTML5_FEATURES = "html_html5_features"
 
 /* ===============================
    HELPER FUNCTION
@@ -56,12 +62,12 @@ fun getHtmlQuestions(
     createdAt: String
 ): List<Question> {
 
-    /* ---------- HTML BASICS ---------- */
-    val basics = listOf(
+    /* ---------- INTRODUCTION TO HTML ---------- */
+    val intro = listOf(
         htmlQuestion(
             id = "html_basics_001",
             categoryId = categoryId,
-            chapterId = HTML_BASICS,
+            chapterId = HTML_INTRO,
             questionText = "What does HTML stand for?",
             options = listOf(
                 "Hyper Text Markup Language",
@@ -77,7 +83,7 @@ fun getHtmlQuestions(
         htmlQuestion(
             id = "html_basics_002",
             categoryId = categoryId,
-            chapterId = HTML_BASICS,
+            chapterId = HTML_INTRO,
             questionText = "Which HTML tag defines the largest heading?",
             options = listOf("<h6>", "<heading>", "<h1>", "<head>"),
             correctAnswer = "<h1>",
@@ -87,7 +93,7 @@ fun getHtmlQuestions(
         )
     )
 
-    /* ---------- HTML FORMS ---------- */
+    /* ---------- FORMS ---------- */
     val forms = listOf(
         htmlQuestion(
             id = "html_forms_001",
@@ -114,39 +120,27 @@ fun getHtmlQuestions(
         )
     )
 
-    /* ---------- HTML MEDIA ---------- */
+    /* ---------- MULTIMEDIA ---------- */
     val media = listOf(
         htmlQuestion(
             id = "html_media_001",
             categoryId = categoryId,
-            chapterId = HTML_MEDIA,
+            chapterId = HTML_MULTIMEDIA,
             questionText = "Which tag is used to insert an image?",
             options = listOf("<image>", "<img>", "<src>", "<pic>"),
             correctAnswer = "<img>",
             explanation = "<img> embeds images in a webpage.",
             difficulty = Difficulty.EASY,
             createdAt = createdAt
-        ),
-        htmlQuestion(
-            id = "html_media_002",
-            categoryId = categoryId,
-            chapterId = HTML_MEDIA,
-            questionText = "Which attribute enables lazy loading for images?",
-            options = listOf("lazy", "defer", "loading='lazy'", "async"),
-            correctAnswer = "loading='lazy'",
-            explanation = "Lazy loading improves page performance.",
-            difficulty = Difficulty.HARD,
-            createdAt = createdAt,
-            points = 25
         )
     )
 
-    /* ---------- HTML ADVANCED ---------- */
-    val advanced = listOf(
+    /* ---------- HTML5 FEATURES ---------- */
+    val html5 = listOf(
         htmlQuestion(
             id = "html_advanced_001",
             categoryId = categoryId,
-            chapterId = HTML_ADVANCED,
+            chapterId = HTML5_FEATURES,
             questionText = "What is the purpose of the Shadow DOM?",
             options = listOf(
                 "Dark mode UI",
@@ -163,7 +157,7 @@ fun getHtmlQuestions(
         htmlQuestion(
             id = "html_advanced_002",
             categoryId = categoryId,
-            chapterId = HTML_ADVANCED,
+            chapterId = HTML5_FEATURES,
             questionText = "What does the 'aria-label' attribute do?",
             options = listOf(
                 "Adds animation",
@@ -179,5 +173,5 @@ fun getHtmlQuestions(
         )
     )
 
-    return basics + forms + media + advanced
+    return intro + forms + media + html5
 }

@@ -7,6 +7,7 @@ import com.example.quizapp.data.repository.QuizRepository
 import com.example.quizapp.util.PreferencesManager
 import com.example.quizapp.util.Resource
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -56,25 +57,31 @@ class QuizViewModel @Inject constructor(
     private var currentChapterName: String = ""
     private var quizStartTime: Long = 0
 
+    private var categoriesJob: Job? = null
+    private var topicsJob: Job? = null
+    private var questionsJob: Job? = null
+
     fun loadCategories() {
-        viewModelScope.launch {
-            _categories.value = Resource.Loading()
-            val result = quizRepository.getCategories()
-            _categories.value = result
+        categoriesJob?.cancel()
+        categoriesJob = viewModelScope.launch {
+            quizRepository.getCategoriesFlow().collect { result ->
+                _categories.value = result
+            }
         }
     }
 
     fun loadTopics(categoryId: String) {
-        viewModelScope.launch {
-            _topics.value = Resource.Loading()
-            val result = quizRepository.getTopicsByCategory(categoryId)
-            _topics.value = result
+        topicsJob?.cancel()
+        topicsJob = viewModelScope.launch {
+            quizRepository.getTopicsFlow(categoryId).collect { result ->
+                _topics.value = result
+            }
         }
     }
 
     fun loadQuestions(categoryId: String, chapterId: String, chapterName: String) {
-        viewModelScope.launch {
-            _questions.value = Resource.Loading()
+        questionsJob?.cancel()
+        questionsJob = viewModelScope.launch {
             _userAnswers.value.clear()
             _answerState.value = emptyMap()
             _currentQuestionIndex.value = 0
@@ -87,23 +94,23 @@ class QuizViewModel @Inject constructor(
             currentQuizId = UUID.randomUUID().toString()
             quizStartTime = System.currentTimeMillis()
 
-            val result = if (chapterId.isNotEmpty()) {
-                quizRepository.getQuestionsByChapter(chapterId = chapterId)
-            } else {
-                quizRepository.getQuestionsByCategory(categoryId)
-            }
-            _questions.value = result
+            quizRepository.getQuestionsByChapterFlow(chapterId).collect { result ->
+                _questions.value = result
 
-            if (result is Resource.Success) {
-                val questions = result.data
-                if (!questions.isNullOrEmpty()) {
-                    val totalTime = questions.sumOf { it.timeLimit }
-                    _timeRemaining.value = totalTime
-                } else {
+                if (result is Resource.Success) {
+                    val questionsList = result.data
+                    if (!questionsList.isNullOrEmpty()) {
+                        val totalTime = questionsList.sumOf { it.timeLimit }
+                        // Only set time if it's the first load or if we haven't started yet
+                        if (_timeRemaining.value == -1) {
+                            _timeRemaining.value = totalTime
+                        }
+                    } else {
+                        _timeRemaining.value = 0
+                    }
+                } else if (result is Resource.Error) {
                     _timeRemaining.value = 0
                 }
-            } else if (result is Resource.Error) {
-                _timeRemaining.value = 0
             }
         }
     }

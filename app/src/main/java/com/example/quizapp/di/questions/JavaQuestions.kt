@@ -8,10 +8,18 @@ import com.example.quizapp.data.model.QuestionType
    CHAPTER IDS (MUST MATCH TOPICS)
    =============================== */
 
-const val JAVA_BASICS = "java_basics"
-const val JAVA_OOP = "java_oop"
-const val JAVA_COLLECTIONS = "java_collections"
-const val JAVA_ADVANCED = "java_advanced"
+const val JAVA_BASICS = "java_java_basics"
+const val JAVA_JVM_JDK = "java_jvm_and_jdk"
+const val JAVA_DATA_TYPES = "java_data_types_and_variables"
+const val JAVA_CONTROL = "java_control_statements"
+const val JAVA_OOP = "java_oop_concepts"
+const val JAVA_INHERITANCE = "java_inheritance_and_polymorphism"
+const val JAVA_INTERFACES = "java_interfaces_and_abstract_classes"
+const val JAVA_EXCEPTIONS = "java_exception_handling"
+const val JAVA_COLLECTIONS = "java_collections_framework"
+const val JAVA_THREADS = "java_multithreading"
+const val JAVA_FILES = "java_file_handling"
+const val JAVA_8 = "java_java_8_features"
 
 /* ===============================
    HELPER FUNCTION
@@ -62,6 +70,21 @@ fun getJavaQuestions(
             id = "java_basics_001",
             categoryId = categoryId,
             chapterId = JAVA_BASICS,
+            questionText = "Which keyword is used to declare a constant in Java?",
+            options = listOf("const", "static", "final", "let"),
+            correctAnswer = "final",
+            explanation = "Final variables cannot be reassigned.",
+            difficulty = Difficulty.EASY,
+            createdAt = createdAt
+        )
+    )
+
+    /* ---------- JVM & JDK ---------- */
+    val jvm = listOf(
+        javaQuestion(
+            id = "java_jvm_001",
+            categoryId = categoryId,
+            chapterId = JAVA_JVM_JDK,
             questionText = "What is the main purpose of the JVM?",
             options = listOf(
                 "To compile Java code",
@@ -73,21 +96,10 @@ fun getJavaQuestions(
             explanation = "The JVM executes Java bytecode and enables platform independence.",
             difficulty = Difficulty.EASY,
             createdAt = createdAt
-        ),
-        javaQuestion(
-            id = "java_basics_002",
-            categoryId = categoryId,
-            chapterId = JAVA_BASICS,
-            questionText = "Which keyword is used to declare a constant in Java?",
-            options = listOf("const", "static", "final", "let"),
-            correctAnswer = "final",
-            explanation = "Final variables cannot be reassigned.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
         )
     )
 
-    /* ---------- JAVA OOP ---------- */
+    /* ---------- OOP CONCEPTS ---------- */
     val oop = listOf(
         javaQuestion(
             id = "java_oop_001",
@@ -118,7 +130,7 @@ fun getJavaQuestions(
         )
     )
 
-    /* ---------- JAVA COLLECTIONS ---------- */
+    /* ---------- COLLECTIONS FRAMEWORK ---------- */
     val collections = listOf(
         javaQuestion(
             id = "java_collections_001",
@@ -145,38 +157,5 @@ fun getJavaQuestions(
         )
     )
 
-    /* ---------- JAVA ADVANCED ---------- */
-    val advanced = listOf(
-        javaQuestion(
-            id = "java_advanced_001",
-            categoryId = categoryId,
-            chapterId = JAVA_ADVANCED,
-            questionText = "Which Garbage Collector is default since Java 9?",
-            options = listOf("Serial GC", "Parallel GC", "G1 GC", "ZGC"),
-            correctAnswer = "G1 GC",
-            explanation = "G1 GC balances latency and throughput.",
-            difficulty = Difficulty.HARD,
-            createdAt = createdAt,
-            points = 25
-        ),
-        javaQuestion(
-            id = "java_advanced_002",
-            categoryId = categoryId,
-            chapterId = JAVA_ADVANCED,
-            questionText = "What is Type Erasure in Java Generics?",
-            options = listOf(
-                "Removing generics at runtime",
-                "Runtime casting",
-                "Deleting generic classes",
-                "Replacing all types with Object manually"
-            ),
-            correctAnswer = "Removing generics at runtime",
-            explanation = "Generic type information is removed at compile time for backward compatibility.",
-            difficulty = Difficulty.HARD,
-            createdAt = createdAt,
-            points = 25
-        )
-    )
-
-    return basics + oop + collections + advanced
+    return basics + jvm + oop + collections
 }

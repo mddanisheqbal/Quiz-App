@@ -26,7 +26,8 @@ class DatabaseSeeder @Inject constructor(
 
     fun seedDatabaseIfNeeded() {
         val prefs = context.getSharedPreferences("quiz_prefs", Context.MODE_PRIVATE)
-        val isSeeded = prefs.getBoolean("database_seeded_v24", false)
+        // Bumping to v30 to fix the UX (all categories appearing at once)
+        val isSeeded = prefs.getBoolean("database_seeded_v32", false)
 
         if (isSeeded) {
             Log.d("DatabaseSeeder", "Database already seeded. Skipping.")
@@ -37,7 +38,7 @@ class DatabaseSeeder @Inject constructor(
             try {
                 Log.d("DatabaseSeeder", "Starting database seeding...")
                 seedDatabase()
-                prefs.edit().putBoolean("database_seeded_v24", true).apply()
+                prefs.edit().putBoolean("database_seeded_v32", true).apply()
                 Log.d("DatabaseSeeder", "Database seeding completed.")
             } catch (e: Exception) {
                 Log.e("DatabaseSeeder", "Seeding failed", e)
@@ -51,26 +52,42 @@ class DatabaseSeeder @Inject constructor(
             Locale.getDefault()
         ).format(Date())
 
-        val categories = listOf(
-            Category("c", "C"),
-            Category("cpp", "C++"),
-            Category("java", "Java"),
-            Category("python", "Python"),
-            Category("kotlin", "Kotlin"),
-            Category("html", "HTML"),
-            Category("css", "CSS"),
-            Category("javascript", "JavaScript")
+        val categoryList = listOf(
+            Category("c", "C", colorHex = "#4CAF50", icon = "C"),
+            Category("cpp", "C++", colorHex = "#2196F3", icon = "C++"),
+            Category("java", "Java", colorHex = "#F44336", icon = "coffee"),
+            Category("python", "Python", colorHex = "#9C27B0", icon = "snake"),
+            Category("kotlin", "Kotlin", colorHex = "#7E57C2", icon = "K"),
+            Category("html", "HTML", colorHex = "#FF9800", icon = "</>"),
+            Category("css", "CSS", colorHex = "#3F51B5", icon = "#"),
+            Category("javascript", "JavaScript", colorHex = "#FFEB3B", icon = "JS")
         )
 
-        for (category in categories) {
+        // 1️⃣ Prepare categories with counts beforehand
+        val finalCategories = categoryList.map { cat ->
+            val chapters = getChapterNames(cat.id)
+            val questions = getQuestions(cat.id, createdAt)
+            cat.copy(
+                topicCount = chapters.size,
+                questionCount = questions.size
+            )
+        }
 
-            // 1️⃣ Save category
-            firestore.collection("categories")
-                .document(category.id)
-                .set(category)
-                .await()
+        // 2️⃣ Batch upload ALL categories at once so they appear together in the UI
+        val categoryBatch = firestore.batch()
+        finalCategories.forEach { category ->
+            categoryBatch.set(
+                firestore.collection("categories").document(category.id),
+                category
+            )
+        }
+        categoryBatch.commit().await()
+        Log.d("DatabaseSeeder", "All categories uploaded in batch.")
 
-            // 2️⃣ Create chapters (topics)
+        // 3️⃣ Now upload topics and questions category by category
+        for (category in finalCategories) {
+
+            // Create chapters (topics)
             val chapters = getChapterNames(category.id).mapIndexed { index, name ->
                 Topic(
                     id = "${category.id}_${slug(name)}",
@@ -81,50 +98,37 @@ class DatabaseSeeder @Inject constructor(
                 )
             }
 
+            // Batch upload topics for this category
+            val topicBatch = firestore.batch()
             chapters.forEach { topic ->
-                firestore.collection("topics")
-                    .document(topic.id)
-                    .set(topic)
-                    .await()
+                topicBatch.set(firestore.collection("topics").document(topic.id), topic)
             }
+            topicBatch.commit().await()
 
-            // 3️⃣ Load questions (DO NOT MODIFY chapterId)
+            // Load questions
             val questions = getQuestions(category.id, createdAt)
             if (questions.isEmpty()) continue
 
-            // 4️⃣ Save questions
+            // Save questions in chunks
             questions.chunked(300).forEach { chunk ->
-                val batch = firestore.batch()
+                val qBatch = firestore.batch()
                 chunk.forEach { q ->
-                    batch.set(
-                        firestore.collection("questions").document(q.id),
-                        q
-                    )
+                    qBatch.set(firestore.collection("questions").document(q.id), q)
                 }
-                batch.commit().await()
+                qBatch.commit().await()
             }
 
-            // 5️⃣ Update chapter question counts
+            // Update topic question counts
             val chapterCounts = questions.groupBy { it.chapterId }
-
             for (topic in chapters) {
                 val count = chapterCounts[topic.id]?.size ?: 0
-                firestore.collection("topics")
-                    .document(topic.id)
-                    .update("questionCount", count)
-                    .await()
+                if (count > 0) {
+                    firestore.collection("topics")
+                        .document(topic.id)
+                        .update("questionCount", count)
+                        .await()
+                }
             }
-
-            // 6️⃣ Update category counts
-            firestore.collection("categories")
-                .document(category.id)
-                .update(
-                    mapOf(
-                        "topicCount" to chapters.size,
-                        "questionCount" to questions.size
-                    )
-                )
-                .await()
         }
     }
 
