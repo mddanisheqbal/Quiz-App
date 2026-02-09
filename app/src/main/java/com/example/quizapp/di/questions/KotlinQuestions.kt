@@ -13,8 +13,13 @@ const val KT_VARS_DATA_TYPES = "kotlin_variables_and_data_types"
 const val KT_CONTROL_FLOW = "kotlin_control_flow"
 const val KT_FUNCTIONS = "kotlin_functions"
 const val KT_NULL_SAFETY = "kotlin_null_safety"
+const val KT_CLASSES_OBJECTS = "kotlin_classes_and_objects"
+const val KT_INHERITANCE = "kotlin_inheritance"
+const val KT_DATA_CLASSES = "kotlin_data_classes"
 const val KT_COLLECTIONS = "kotlin_collections"
+const val KT_LAMBDAS = "kotlin_lambdas"
 const val KT_COROUTINES = "kotlin_coroutines"
+const val KT_ANDROID_BASICS = "kotlin_android_basics"
 
 /* ===============================
    HELPER FUNCTION

@@ -11,8 +11,14 @@ import com.example.quizapp.data.model.QuestionType
 const val PY_BASICS = "python_python_basics"
 const val PY_VARS_DATA_TYPES = "python_variables_and_data_types"
 const val PY_OPERATORS = "python_operators"
+const val PY_CONDITIONAL_STATEMENTS = "python_conditional_statements"
+const val PY_LOOPS = "python_loops"
+const val PY_LISTS_TUPLES = "python_lists_and_tuples"
+const val PY_SETS_DICTS = "python_sets_and_dictionaries"
 const val PY_FUNCTIONS = "python_functions"
+const val PY_MODULES_PACKAGES = "python_modules_and_packages"
 const val PY_FILE_HANDLING = "python_file_handling"
+const val PY_EXCEPTION_HANDLING = "python_exception_handling"
 const val PY_OOP = "python_oop_in_python"
 
 /* ===============================
@@ -58,158 +64,163 @@ fun getPythonQuestions(
     createdAt: String
 ): List<Question> {
 
-    /* ---------- BASICS ---------- */
-    val basics = listOf(
-        pythonQuestion(
-            id = "py_basic_001",
-            categoryId = categoryId,
-            chapterId = PY_BASICS,
-            questionText = "What is the correct file extension for Python files?",
-            options = listOf(".pyth", ".pt", ".py", ".pyc"),
-            correctAnswer = ".py",
-            explanation = "Python source files use the .py extension.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        ),
-        pythonQuestion(
-            id = "py_basic_002",
-            categoryId = categoryId,
-            chapterId = PY_BASICS,
-            questionText = "Which function prints output to the screen?",
-            options = listOf("echo()", "print()", "printf()", "display()"),
-            correctAnswer = "print()",
-            explanation = "print() sends output to the console.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        )
-    )
+    val questions = mutableListOf<Question>()
 
-    /* ---------- VARIABLES & DATA TYPES ---------- */
-    val vars = listOf(
-        pythonQuestion(
-            id = "py_col_001",
-            categoryId = categoryId,
-            chapterId = PY_VARS_DATA_TYPES,
-            questionText = "Which collection stores unique values?",
-            options = listOf("List", "Tuple", "Set", "Dictionary"),
-            correctAnswer = "Set",
-            explanation = "Sets automatically remove duplicates.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        ),
-        pythonQuestion(
-            id = "py_col_002",
-            categoryId = categoryId,
-            chapterId = PY_VARS_DATA_TYPES,
-            questionText = "Which method adds an element to the end of a list?",
-            options = listOf("add()", "insert()", "append()", "push()"),
-            correctAnswer = "append()",
-            explanation = "append() adds an item at the end of the list.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        )
-    )
+    /* ---------- 1. Python Basics ---------- */
+    questions.add(pythonQuestion(
+        id = "py_basics_001",
+        categoryId = categoryId,
+        chapterId = PY_BASICS,
+        questionText = "Who developed Python Programming Language?",
+        options = listOf("Wick van Rossum", "Rasmus Lerdorf", "Guido van Rossum", "Niene Stom"),
+        correctAnswer = "Guido van Rossum",
+        explanation = "Python was created by Guido van Rossum and first released in 1991.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
 
-    /* ---------- FUNCTIONS ---------- */
-    val functions = listOf(
-        pythonQuestion(
-            id = "py_func_001",
-            categoryId = categoryId,
-            chapterId = PY_FUNCTIONS,
-            questionText = "How do you define a function in Python?",
-            options = listOf(
-                "function myFunc():",
-                "def myFunc():",
-                "create myFunc():",
-                "func myFunc():"
-            ),
-            correctAnswer = "def myFunc():",
-            explanation = "Functions are defined using the def keyword.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        ),
-        pythonQuestion(
-            id = "py_func_002",
-            categoryId = categoryId,
-            chapterId = PY_FUNCTIONS,
-            questionText = "What keyword returns a value from a function?",
-            options = listOf("send", "give", "return", "exit"),
-            correctAnswer = "return",
-            explanation = "return sends a value back to the caller.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        )
-    )
+    /* ---------- 2. Variables & Data Types ---------- */
+    questions.add(pythonQuestion(
+        id = "py_vars_001",
+        categoryId = categoryId,
+        chapterId = PY_VARS_DATA_TYPES,
+        questionText = "Which of the following is an invalid variable name in Python?",
+        options = listOf("my_var", "_var", "2var", "var2"),
+        correctAnswer = "2var",
+        explanation = "Variable names cannot start with a digit.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
 
-    /* ---------- OOP ---------- */
-    val oop = listOf(
-        pythonQuestion(
-            id = "py_oop_001",
-            categoryId = categoryId,
-            chapterId = PY_OOP,
-            questionText = "Which keyword is used to define a class?",
-            options = listOf("struct", "define", "class", "object"),
-            correctAnswer = "class",
-            explanation = "Classes are defined using the class keyword.",
-            difficulty = Difficulty.EASY,
-            createdAt = createdAt
-        ),
-        pythonQuestion(
-            id = "py_oop_002",
-            categoryId = categoryId,
-            chapterId = PY_OOP,
-            questionText = "What does 'self' represent in a class?",
-            options = listOf(
-                "The class itself",
-                "The instance of the class",
-                "A global object",
-                "A static reference"
-            ),
-            correctAnswer = "The instance of the class",
-            explanation = "self refers to the current object instance.",
-            difficulty = Difficulty.MEDIUM,
-            createdAt = createdAt,
-            points = 15
-        )
-    )
+    /* ---------- 3. Operators ---------- */
+    questions.add(pythonQuestion(
+        id = "py_ops_001",
+        categoryId = categoryId,
+        chapterId = PY_OPERATORS,
+        questionText = "Which operator is used for exponentiation (power) in Python?",
+        options = listOf("^", "**", "//", "%"),
+        correctAnswer = "**",
+        explanation = "** is the exponentiation operator in Python.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
 
-    /* ---------- ADVANCED ---------- */
-    val advanced = listOf(
-        pythonQuestion(
-            id = "py_adv_001",
-            categoryId = categoryId,
-            chapterId = PY_BASICS, // Relocated or updated to match a category
-            questionText = "What is a generator?",
-            options = listOf(
-                "A list builder",
-                "A function returning an iterator",
-                "A loop",
-                "A memory allocator"
-            ),
-            correctAnswer = "A function returning an iterator",
-            explanation = "Generators yield values lazily using yield.",
-            difficulty = Difficulty.HARD,
-            createdAt = createdAt,
-            points = 25
-        ),
-        pythonQuestion(
-            id = "py_adv_002",
-            categoryId = categoryId,
-            chapterId = PY_BASICS, // Relocated or updated
-            questionText = "What does the GIL do?",
-            options = listOf(
-                "Improves threading speed",
-                "Allows only one thread to execute Python bytecode",
-                "Handles garbage collection",
-                "Manages memory"
-            ),
-            correctAnswer = "Allows only one thread to execute Python bytecode",
-            explanation = "The GIL limits true parallel threading in CPython.",
-            difficulty = Difficulty.HARD,
-            createdAt = createdAt,
-            points = 25
-        )
-    )
+    /* ---------- 4. Conditional Statements ---------- */
+    questions.add(pythonQuestion(
+        id = "py_cond_001",
+        categoryId = categoryId,
+        chapterId = PY_CONDITIONAL_STATEMENTS,
+        questionText = "Which keyword is used for else-if in Python?",
+        options = listOf("elseif", "else if", "elif", "elif-if"),
+        correctAnswer = "elif",
+        explanation = "elif is the shorthand for else if in Python.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
 
-    return basics + vars + functions + oop + advanced
+    /* ---------- 5. Loops ---------- */
+    questions.add(pythonQuestion(
+        id = "py_loops_001",
+        categoryId = categoryId,
+        chapterId = PY_LOOPS,
+        questionText = "Which loop is used to iterate over a sequence (like a list or string)?",
+        options = listOf("while", "for", "do-while", "foreach"),
+        correctAnswer = "for",
+        explanation = "The for loop is used for iterating over a sequence.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
+
+    /* ---------- 6. Lists & Tuples ---------- */
+    questions.add(pythonQuestion(
+        id = "py_lists_001",
+        categoryId = categoryId,
+        chapterId = PY_LISTS_TUPLES,
+        questionText = "Which statement is true about Tuples?",
+        options = listOf("Tuples are mutable", "Tuples are immutable", "Tuples use square brackets", "Tuples cannot contain duplicates"),
+        correctAnswer = "Tuples are immutable",
+        explanation = "Tuples are immutable sequences in Python.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
+
+    /* ---------- 7. Sets & Dictionaries ---------- */
+    questions.add(pythonQuestion(
+        id = "py_sets_001",
+        categoryId = categoryId,
+        chapterId = PY_SETS_DICTS,
+        questionText = "How do you access a value in a dictionary?",
+        options = listOf("Using index", "Using key", "Using value", "Using position"),
+        correctAnswer = "Using key",
+        explanation = "Dictionary values are accessed using their corresponding keys.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
+
+    /* ---------- 8. Functions ---------- */
+    questions.add(pythonQuestion(
+        id = "py_funcs_001",
+        categoryId = categoryId,
+        chapterId = PY_FUNCTIONS,
+        questionText = "Which keyword is used to create a function in Python?",
+        options = listOf("function", "def", "fun", "define"),
+        correctAnswer = "def",
+        explanation = "Functions are defined using the 'def' keyword.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
+
+    /* ---------- 9. Modules & Packages ---------- */
+    questions.add(pythonQuestion(
+        id = "py_mods_001",
+        categoryId = categoryId,
+        chapterId = PY_MODULES_PACKAGES,
+        questionText = "Which keyword is used to import a module?",
+        options = listOf("include", "using", "import", "require"),
+        correctAnswer = "import",
+        explanation = "The 'import' keyword is used to bring in modules.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
+
+    /* ---------- 10. File Handling ---------- */
+    questions.add(pythonQuestion(
+        id = "py_files_001",
+        categoryId = categoryId,
+        chapterId = PY_FILE_HANDLING,
+        questionText = "Which mode is used to open a file for reading in Python?",
+        options = listOf("'w'", "'a'", "'r'", "'x'"),
+        correctAnswer = "'r'",
+        explanation = "'r' stands for read mode.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
+
+    /* ---------- 11. Exception Handling ---------- */
+    questions.add(pythonQuestion(
+        id = "py_exc_001",
+        categoryId = categoryId,
+        chapterId = PY_EXCEPTION_HANDLING,
+        questionText = "Which block is used to catch exceptions in Python?",
+        options = listOf("catch", "except", "try", "finally"),
+        correctAnswer = "except",
+        explanation = "Python uses 'try...except' blocks for exception handling.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
+
+    /* ---------- 12. OOP in Python ---------- */
+    questions.add(pythonQuestion(
+        id = "py_oop_001",
+        categoryId = categoryId,
+        chapterId = PY_OOP,
+        questionText = "What is the name of the constructor method in Python classes?",
+        options = listOf("__init__()", "constructor()", "new()", "init()"),
+        correctAnswer = "__init__()",
+        explanation = "__init__ is the special method called when an object is instantiated.",
+        difficulty = Difficulty.EASY,
+        createdAt = createdAt
+    ))
+
+    return questions
 }
