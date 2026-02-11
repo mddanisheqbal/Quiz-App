@@ -50,22 +50,23 @@ class QuizViewModel @Inject constructor(
     private val _quizResult = MutableStateFlow<Resource<QuizResult>?>(null)
     val quizResult: StateFlow<Resource<QuizResult>?> = _quizResult
 
-    private var currentQuizId: String = ""
-    private var currentCategoryId: String = ""
-    private var currentCategoryName: String = ""
-    private var currentChapterId: String = ""
-    private var currentChapterName: String = ""
-    private var quizStartTime: Long = 0
+    private var currentQuizId = ""
+    private var currentCategoryId = ""
+    private var currentChapterId = ""
+    private var quizStartTime = 0L
 
     private var categoriesJob: Job? = null
     private var topicsJob: Job? = null
     private var questionsJob: Job? = null
 
+    // ✅ KEY FIX
+    private var isSessionInitialized = false
+
     fun loadCategories() {
         categoriesJob?.cancel()
         categoriesJob = viewModelScope.launch {
-            quizRepository.getCategoriesFlow().collect { result ->
-                _categories.value = result
+            quizRepository.getCategoriesFlow().collect {
+                _categories.value = it
             }
         }
     }
@@ -73,8 +74,8 @@ class QuizViewModel @Inject constructor(
     fun loadTopics(categoryId: String) {
         topicsJob?.cancel()
         topicsJob = viewModelScope.launch {
-            quizRepository.getTopicsFlow(categoryId).collect { result ->
-                _topics.value = result
+            quizRepository.getTopicsFlow(categoryId).collect {
+                _topics.value = it
             }
         }
     }
@@ -82,34 +83,43 @@ class QuizViewModel @Inject constructor(
     fun loadQuestions(categoryId: String, chapterId: String, chapterName: String) {
         questionsJob?.cancel()
         questionsJob = viewModelScope.launch {
+
+            // Reset session
+            isSessionInitialized = false
+            _questions.value = Resource.Loading()
+            _currentQuestionIndex.value = 0
             _userAnswers.value.clear()
             _answerState.value = emptyMap()
-            _currentQuestionIndex.value = 0
-            _quizResult.value = null
             _timeRemaining.value = -1
+            _quizResult.value = null
 
             currentCategoryId = categoryId
             currentChapterId = chapterId
-            currentChapterName = chapterName
             currentQuizId = UUID.randomUUID().toString()
             quizStartTime = System.currentTimeMillis()
 
             quizRepository.getQuestionsByChapterFlow(chapterId).collect { result ->
-                _questions.value = result
+                when (result) {
+                    is Resource.Success -> {
+                        if (!isSessionInitialized) {
+                            val shuffled = result.data?.shuffled().orEmpty()
+                            _questions.value = Resource.Success(shuffled)
 
-                if (result is Resource.Success) {
-                    val questionsList = result.data
-                    if (!questionsList.isNullOrEmpty()) {
-                        val totalTime = questionsList.sumOf { it.timeLimit }
-                        // Only set time if it's the first load or if we haven't started yet
-                        if (_timeRemaining.value == -1) {
+                            val totalTime = shuffled.sumOf { it.timeLimit }
                             _timeRemaining.value = totalTime
+
+                            isSessionInitialized = true
                         }
-                    } else {
+                    }
+
+                    is Resource.Error -> {
+                        _questions.value = result
                         _timeRemaining.value = 0
                     }
-                } else if (result is Resource.Error) {
-                    _timeRemaining.value = 0
+
+                    is Resource.Loading -> {
+                        _questions.value = result
+                    }
                 }
             }
         }
@@ -117,7 +127,7 @@ class QuizViewModel @Inject constructor(
 
     fun setAnswer(questionIndex: Int, answer: String) {
         val answers = _userAnswers.value.toMutableMap()
-        if (answers[questionIndex] == null) {
+        if (!answers.containsKey(questionIndex)) {
             answers[questionIndex] = answer
             _userAnswers.value = answers
             checkAnswer(questionIndex, answer)
@@ -126,23 +136,22 @@ class QuizViewModel @Inject constructor(
 
     private fun checkAnswer(questionIndex: Int, userAnswer: String) {
         val question = _questions.value.data?.getOrNull(questionIndex) ?: return
-        val isCorrect = userAnswer.equals(question.correctAnswer, ignoreCase = true)
-        val newState = if (isCorrect) AnswerState.CORRECT else AnswerState.INCORRECT
+        val isCorrect = userAnswer.equals(question.correctAnswer, true)
 
-        val newAnswerStates = _answerState.value.toMutableMap()
-        newAnswerStates[questionIndex] = newState
-        _answerState.value = newAnswerStates
+        val map = _answerState.value.toMutableMap()
+        map[questionIndex] = if (isCorrect) AnswerState.CORRECT else AnswerState.INCORRECT
+        _answerState.value = map
     }
 
     fun nextQuestion() {
         if (_currentQuestionIndex.value < (_questions.value.data?.size ?: 0) - 1) {
-            _currentQuestionIndex.value += 1
+            _currentQuestionIndex.value++
         }
     }
 
     fun previousQuestion() {
         if (_currentQuestionIndex.value > 0) {
-            _currentQuestionIndex.value -= 1
+            _currentQuestionIndex.value--
         }
     }
 
@@ -161,93 +170,71 @@ class QuizViewModel @Inject constructor(
             _quizResult.value = Resource.Loading()
 
             val userId = prefsManager.getUserId()
-            if (userId == null) {
-                _quizResult.value = Resource.Error("User not logged in. Please restart the app.")
-                return@launch
-            }
+                ?: return@launch run {
+                    _quizResult.value = Resource.Error("User not logged in")
+                }
 
-            val questions = _questions.value.data
-            if (questions.isNullOrEmpty()) {
-                _quizResult.value = Resource.Error("No questions available")
-                return@launch
-            }
+            val questions = _questions.value.data.orEmpty()
 
-            var correctCount = 0
-            var wrongCount = 0
-            var skippedCount = 0
-            var totalScore = 0
+            var correct = 0
+            var wrong = 0
+            var skipped = 0
+            var score = 0
             val maxScore = questions.sumOf { it.points }
-            val userAnswersList = mutableMapOf<String, UserAnswer>()
 
-            questions.forEachIndexed { index, question ->
-                val userAnswer = _userAnswers.value[index] ?: ""
-                val isCorrect = when (question.questionType) {
-                    QuestionType.MULTIPLE_CHOICE, QuestionType.TRUE_FALSE -> userAnswer.equals(question.correctAnswer, ignoreCase = true)
-                    QuestionType.SHORT_ANSWER -> userAnswer.trim().equals(question.correctAnswer.trim(), ignoreCase = true)
-                    else -> false
+            val answers = mutableMapOf<String, UserAnswer>()
+
+            questions.forEachIndexed { index, q ->
+                val ua = _userAnswers.value[index].orEmpty()
+                val isCorrect = ua.equals(q.correctAnswer, true)
+
+                when {
+                    ua.isEmpty() -> skipped++
+                    isCorrect -> {
+                        correct++
+                        score += q.points
+                    }
+                    else -> wrong++
                 }
 
-                if (userAnswer.isEmpty()) {
-                    skippedCount++
-                } else if (isCorrect) {
-                    correctCount++
-                    totalScore += question.points
-                } else {
-                    wrongCount++
-                }
-
-                userAnswersList[index.toString()] = UserAnswer(
-                    questionId = question.id,
-                    questionText = question.questionText,
-                    userAnswer = userAnswer,
-                    correctAnswer = question.correctAnswer,
-                    isCorrect = isCorrect,
-                    timeTaken = 0
+                answers[index.toString()] = UserAnswer(
+                    q.id, q.questionText, ua, q.correctAnswer, isCorrect, 0
                 )
             }
 
             val timeTaken = ((System.currentTimeMillis() - quizStartTime) / 1000).toInt()
-            val percentage = if (maxScore > 0) (totalScore.toFloat() / maxScore) * 100 else 0f
+            val percentage = if (maxScore > 0) score * 100f / maxScore else 0f
 
             val result = QuizResult(
-                id = UUID.randomUUID().toString(),
-                userId = userId,
-                quizId = currentQuizId,
-                categoryId = currentCategoryId,
-                categoryName = currentCategoryName,
-                totalQuestions = questions.size,
-                correctAnswers = correctCount,
-                wrongAnswers = wrongCount,
-                skippedAnswers = skippedCount,
-                totalScore = totalScore,
-                maxScore = maxScore,
-                percentage = percentage,
-                timeTaken = timeTaken,
-                answers = userAnswersList,
-                completedAt = System.currentTimeMillis()
+                UUID.randomUUID().toString(),
+                userId,
+                currentQuizId,
+                currentCategoryId,
+                "",
+                questions.size,
+                correct,
+                wrong,
+                skipped,
+                score,
+                maxScore,
+                percentage,
+                timeTaken,
+                answers,
+                System.currentTimeMillis()
             )
 
-            val saveResult = quizRepository.saveQuizResult(result)
-
-            if (saveResult is Resource.Success) {
-                _quizResult.value = Resource.Success(result)
-            } else {
-                _quizResult.value = Resource.Error(saveResult.message ?: "Failed to save result to Firestore")
-            }
+            _quizResult.value = quizRepository.saveQuizResult(result)
+                .let { if (it is Resource.Success) Resource.Success(result) else Resource.Error(it.message!!) }
         }
     }
 
     fun resetQuiz() {
+        isSessionInitialized = false
+        _questions.value = Resource.Loading()
         _currentQuestionIndex.value = 0
-        _userAnswers.value = mutableMapOf()
+        _userAnswers.value.clear()
+        _answerState.value = emptyMap()
         _timeRemaining.value = -1
         _quizResult.value = null
-        _answerState.value = emptyMap()
-        currentQuizId = ""
-        currentCategoryId = ""
-        currentCategoryName = ""
-        currentChapterId = ""
-        currentChapterName = ""
-        quizStartTime = 0
     }
 }
