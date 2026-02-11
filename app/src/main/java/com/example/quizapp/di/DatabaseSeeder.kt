@@ -27,19 +27,19 @@ class DatabaseSeeder @Inject constructor(
     fun seedDatabaseIfNeeded() {
         val prefs = context.getSharedPreferences("quiz_prefs", Context.MODE_PRIVATE)
 
-        // Incremented version to v38 to fix chapterId leakage and 90-question bug
-        val isSeeded = prefs.getBoolean("database_seeded_v39", false)
+
+        val isSeeded = prefs.getBoolean("database_seeded_v42", false)
 
         if (isSeeded) {
-            Log.d("DatabaseSeeder", "Database already seeded (v39). Skipping.")
+            Log.d("DatabaseSeeder", "Database already seeded (v42). Skipping.")
             return
         }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d("DatabaseSeeder", "Starting database seeding (v39)...")
+                Log.d("DatabaseSeeder", "Starting database seeding (v42)...")
                 seedDatabase()
-                prefs.edit().putBoolean("database_seeded_v39", true).apply()
+                prefs.edit().putBoolean("database_seeded_v42", true).apply()
                 Log.d("DatabaseSeeder", "Database seeding completed.")
             } catch (e: Exception) {
                 Log.e("DatabaseSeeder", "Seeding failed", e)
