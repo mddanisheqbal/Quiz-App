@@ -27,18 +27,19 @@ class DatabaseSeeder @Inject constructor(
     fun seedDatabaseIfNeeded() {
         val prefs = context.getSharedPreferences("quiz_prefs", Context.MODE_PRIVATE)
 
-        val isSeeded = prefs.getBoolean("database_seeded_v35", false)
+        // Incremented version to v38 to fix chapterId leakage and 90-question bug
+        val isSeeded = prefs.getBoolean("database_seeded_v39", false)
 
         if (isSeeded) {
-            Log.d("DatabaseSeeder", "Database already seeded. Skipping.")
+            Log.d("DatabaseSeeder", "Database already seeded (v39). Skipping.")
             return
         }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d("DatabaseSeeder", "Starting database seeding...")
+                Log.d("DatabaseSeeder", "Starting database seeding (v39)...")
                 seedDatabase()
-                prefs.edit().putBoolean("database_seeded_v35", true).apply()
+                prefs.edit().putBoolean("database_seeded_v39", true).apply()
                 Log.d("DatabaseSeeder", "Database seeding completed.")
             } catch (e: Exception) {
                 Log.e("DatabaseSeeder", "Seeding failed", e)
@@ -73,7 +74,7 @@ class DatabaseSeeder @Inject constructor(
             )
         }
 
-        // 2️⃣ Batch upload ALL categories at once so they appear together in the UI
+        // 2️⃣ Batch upload ALL categories at once
         val categoryBatch = firestore.batch()
         finalCategories.forEach { category ->
             categoryBatch.set(
@@ -82,7 +83,6 @@ class DatabaseSeeder @Inject constructor(
             )
         }
         categoryBatch.commit().await()
-        Log.d("DatabaseSeeder", "All categories uploaded in batch.")
 
         // 3️⃣ Now upload topics and questions category by category
         for (category in finalCategories) {
