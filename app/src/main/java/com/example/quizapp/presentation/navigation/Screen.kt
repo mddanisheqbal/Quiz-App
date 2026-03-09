@@ -13,6 +13,8 @@ sealed class Screen(val route: String) {
     }
     object Result : Screen("result")
     object History : Screen("history")
+    object Bookmark : Screen("bookmark")
+    object AboutUs : Screen("about_us")
     object AdminLogin : Screen("admin_login")
     object AdminDashboard : Screen("admin_dashboard")
     object ManageCategories : Screen("manage_categories")

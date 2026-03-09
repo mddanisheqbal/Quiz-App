@@ -1,5 +1,7 @@
 package com.example.quizapp.presentation.navigation
 
+import androidx.compose.animation.*
+import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.*
@@ -17,7 +19,31 @@ fun NavGraph(
 ) {
     NavHost(
         navController = navController,
-        startDestination = startDestination
+        startDestination = startDestination,
+        enterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { it },
+                animationSpec = tween(300)
+            ) + fadeIn(animationSpec = tween(300))
+        },
+        exitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { -it },
+                animationSpec = tween(300)
+            ) + fadeOut(animationSpec = tween(300))
+        },
+        popEnterTransition = {
+            slideInHorizontally(
+                initialOffsetX = { -it },
+                animationSpec = tween(300)
+            ) + fadeIn(animationSpec = tween(300))
+        },
+        popExitTransition = {
+            slideOutHorizontally(
+                targetOffsetX = { it },
+                animationSpec = tween(300)
+            ) + fadeOut(animationSpec = tween(300))
+        }
     ) {
         composable(Screen.Splash.route) {
             SplashScreen(
@@ -54,22 +80,22 @@ fun NavGraph(
 
         navigation(startDestination = Screen.Home.route, route = "main_flow") {
             composable(Screen.Home.route) {
-                HomeScreen(
-                    onNavigateToTopic = { categoryId, categoryName ->
-                        navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName))
-                    },
-                    onNavigateToQuiz = { categoryId, categoryName ->
-                        // This might be used for categories without chapters, but based on request, 
-                        // we go to Chapters first.
-                        navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName))
-                    },
-                    onNavigateToHistory = { navController.navigate(Screen.History.route) },
-                    onLogout = {
-                        navController.navigate(Screen.Login.route) {
-                            popUpTo("main_flow") { inclusive = true }
+                MainDrawerScreen(navController = navController) {
+                    HomeScreen(
+                        onNavigateToTopic = { categoryId, categoryName ->
+                            navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName))
+                        },
+                        onNavigateToQuiz = { categoryId, categoryName ->
+                            navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName))
+                        },
+                        onNavigateToHistory = { navController.navigate(Screen.History.route) },
+                        onLogout = {
+                            navController.navigate(Screen.Login.route) {
+                                popUpTo("main_flow") { inclusive = true }
+                            }
                         }
-                    }
-                )
+                    )
+                }
             }
 
             composable(
@@ -136,6 +162,18 @@ fun NavGraph(
 
             composable(Screen.History.route) {
                 HistoryScreen(onNavigateBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.Bookmark.route) {
+                MainDrawerScreen(navController = navController) {
+                    BookmarkScreen(onNavigateBack = { navController.popBackStack() })
+                }
+            }
+
+            composable(Screen.AboutUs.route) {
+                MainDrawerScreen(navController = navController) {
+                    AboutUsScreen(onNavigateBack = { navController.popBackStack() })
+                }
             }
         }
 
