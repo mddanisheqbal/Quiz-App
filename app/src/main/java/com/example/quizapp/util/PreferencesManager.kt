@@ -53,6 +53,30 @@ class PreferencesManager @Inject constructor(
         return prefs.getBoolean(Constants.KEY_IS_LOGGED_IN, false)
     }
 
+    fun getCurrentStreak(): Int {
+        return prefs.getInt(Constants.KEY_CURRENT_STREAK, 0)
+    }
+
+    fun setCurrentStreak(streak: Int) {
+        prefs.edit().putInt(Constants.KEY_CURRENT_STREAK, streak).apply()
+    }
+
+    fun getLastQuizDate(): String? {
+        return prefs.getString(Constants.KEY_LAST_QUIZ_DATE, null)
+    }
+
+    fun setLastQuizDate(date: String) {
+        prefs.edit().putString(Constants.KEY_LAST_QUIZ_DATE, date).apply()
+    }
+
+    fun getTotalXP(): Int {
+        return prefs.getInt(Constants.KEY_TOTAL_XP, 0)
+    }
+
+    fun setTotalXP(xp: Int) {
+        prefs.edit().putInt(Constants.KEY_TOTAL_XP, xp).apply()
+    }
+
     fun clearAll() {
         prefs.edit().clear().apply()
     }

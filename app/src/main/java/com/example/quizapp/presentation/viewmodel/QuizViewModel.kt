@@ -2,14 +2,17 @@ package com.example.quizapp.presentation.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.quizapp.data.local.BookmarkDao
+import com.example.quizapp.data.local.BookmarkEntity
 import com.example.quizapp.data.model.*
 import com.example.quizapp.data.repository.QuizRepository
+import com.example.quizapp.util.Constants
 import com.example.quizapp.util.PreferencesManager
 import com.example.quizapp.util.Resource
+import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
 import javax.inject.Inject
@@ -23,7 +26,8 @@ enum class AnswerState {
 @HiltViewModel
 class QuizViewModel @Inject constructor(
     private val quizRepository: QuizRepository,
-    private val prefsManager: PreferencesManager
+    private val prefsManager: PreferencesManager,
+    private val bookmarkDao: BookmarkDao
 ) : ViewModel() {
 
     private val _categories = MutableStateFlow<Resource<List<Category>>>(Resource.Loading())
@@ -50,16 +54,26 @@ class QuizViewModel @Inject constructor(
     private val _quizResult = MutableStateFlow<Resource<QuizResult>?>(null)
     val quizResult: StateFlow<Resource<QuizResult>?> = _quizResult
 
+    private val _totalXP = MutableStateFlow(prefsManager.getTotalXP())
+    val totalXP: StateFlow<Int> = _totalXP
+
+    private val _userLevel = MutableStateFlow(calculateLevel(prefsManager.getTotalXP()))
+    val userLevel: StateFlow<Int> = _userLevel
+
+    val bookmarkedQuestions: StateFlow<List<BookmarkEntity>> = bookmarkDao.getAllBookmarks()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private var currentQuizId = ""
     private var currentCategoryId = ""
+    private var currentCategoryName = ""
     private var currentChapterId = ""
+    private var currentChapterName = ""
     private var quizStartTime = 0L
 
     private var categoriesJob: Job? = null
     private var topicsJob: Job? = null
     private var questionsJob: Job? = null
 
-    // ✅ KEY FIX
     private var isSessionInitialized = false
 
     fun loadCategories() {
@@ -83,8 +97,6 @@ class QuizViewModel @Inject constructor(
     fun loadQuestions(categoryId: String, chapterId: String, chapterName: String) {
         questionsJob?.cancel()
         questionsJob = viewModelScope.launch {
-
-            // Reset session
             isSessionInitialized = false
             _questions.value = Resource.Loading()
             _currentQuestionIndex.value = 0
@@ -94,7 +106,9 @@ class QuizViewModel @Inject constructor(
             _quizResult.value = null
 
             currentCategoryId = categoryId
+            currentCategoryName = "" // Will be updated if available
             currentChapterId = chapterId
+            currentChapterName = chapterName
             currentQuizId = UUID.randomUUID().toString()
             quizStartTime = System.currentTimeMillis()
 
@@ -104,19 +118,15 @@ class QuizViewModel @Inject constructor(
                         if (!isSessionInitialized) {
                             val shuffled = result.data?.shuffled().orEmpty()
                             _questions.value = Resource.Success(shuffled)
-
                             val totalTime = shuffled.sumOf { it.timeLimit }
                             _timeRemaining.value = totalTime
-
                             isSessionInitialized = true
                         }
                     }
-
                     is Resource.Error -> {
                         _questions.value = result
                         _timeRemaining.value = 0
                     }
-
                     is Resource.Loading -> {
                         _questions.value = result
                     }
@@ -137,7 +147,6 @@ class QuizViewModel @Inject constructor(
     private fun checkAnswer(questionIndex: Int, userAnswer: String) {
         val question = _questions.value.data?.getOrNull(questionIndex) ?: return
         val isCorrect = userAnswer.equals(question.correctAnswer, true)
-
         val map = _answerState.value.toMutableMap()
         map[questionIndex] = if (isCorrect) AnswerState.CORRECT else AnswerState.INCORRECT
         _answerState.value = map
@@ -169,32 +178,33 @@ class QuizViewModel @Inject constructor(
         viewModelScope.launch {
             _quizResult.value = Resource.Loading()
 
-            val userId = prefsManager.getUserId()
-                ?: return@launch run {
-                    _quizResult.value = Resource.Error("User not logged in")
-                }
+            val firebaseUser = FirebaseAuth.getInstance().currentUser
+            val userId = firebaseUser?.uid ?: prefsManager.getUserId()
+            
+            if (userId == null) {
+                _quizResult.value = Resource.Error("User not logged in")
+                return@launch
+            }
 
             val questions = _questions.value.data.orEmpty()
-
             var correct = 0
             var wrong = 0
-            var skipped = 0
+            var notAttempted = 0
             var score = 0
             val maxScore = questions.sumOf { it.points }
-
             val answers = mutableMapOf<String, UserAnswer>()
 
             questions.forEachIndexed { index, q ->
                 val ua = _userAnswers.value[index].orEmpty()
                 val isCorrect = ua.equals(q.correctAnswer, true)
-
-                when {
-                    ua.isEmpty() -> skipped++
-                    isCorrect -> {
-                        correct++
-                        score += q.points
-                    }
-                    else -> wrong++
+                
+                if (ua.isEmpty()) {
+                    notAttempted++
+                } else if (isCorrect) {
+                    correct++
+                    score += q.points
+                } else {
+                    wrong++
                 }
 
                 answers[index.toString()] = UserAnswer(
@@ -210,11 +220,11 @@ class QuizViewModel @Inject constructor(
                 userId,
                 currentQuizId,
                 currentCategoryId,
-                "",
+                currentCategoryName,
                 questions.size,
                 correct,
                 wrong,
-                skipped,
+                notAttempted,
                 score,
                 maxScore,
                 percentage,
@@ -223,8 +233,63 @@ class QuizViewModel @Inject constructor(
                 System.currentTimeMillis()
             )
 
-            _quizResult.value = quizRepository.saveQuizResult(result)
-                .let { if (it is Resource.Success) Resource.Success(result) else Resource.Error(it.message!!) }
+            val saveResult = quizRepository.saveQuizResult(result)
+            if (saveResult is Resource.Success) {
+                val earnedXP = (correct * Constants.XP_PER_CORRECT_ANSWER) + Constants.XP_QUIZ_COMPLETED_BONUS
+                addXP(earnedXP)
+                _quizResult.value = Resource.Success(result)
+            } else {
+                _quizResult.value = Resource.Error(saveResult.message ?: "Failed to save result")
+            }
+        }
+    }
+
+    private fun addXP(xp: Int) {
+        val updatedXP = _totalXP.value + xp
+        _totalXP.value = updatedXP
+        _userLevel.value = calculateLevel(updatedXP)
+        
+        viewModelScope.launch {
+            prefsManager.setTotalXP(updatedXP)
+        }
+    }
+
+    private fun calculateLevel(xp: Int): Int {
+        return when {
+            xp >= 1400 -> 5
+            xp >= 900 -> 4
+            xp >= 500 -> 3
+            xp >= 200 -> 2
+            else -> 1
+        }
+    }
+
+    fun toggleBookmark(question: Question) {
+        viewModelScope.launch {
+            val isBookmarked = bookmarkedQuestions.value.any { it.questionId == question.id }
+            if (isBookmarked) {
+                bookmarkDao.deleteByQuestionId(question.id)
+            } else {
+                val entity = BookmarkEntity(
+                    questionId = question.id,
+                    questionText = question.questionText,
+                    options = question.options,
+                    correctAnswer = question.correctAnswer,
+                    topicName = currentChapterName,
+                    categoryName = currentCategoryName
+                )
+                bookmarkDao.insertBookmark(entity)
+            }
+        }
+    }
+
+    fun isQuestionBookmarked(questionId: String): Flow<Boolean> {
+        return bookmarkDao.isBookmarked(questionId)
+    }
+
+    fun removeBookmark(questionId: String) {
+        viewModelScope.launch {
+            bookmarkDao.deleteByQuestionId(questionId)
         }
     }
 

@@ -3,11 +3,15 @@ package com.example.quizapp.presentation.screens
 import android.content.Intent
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Logout
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -36,7 +40,6 @@ fun MainDrawerScreen(
     var showLogoutDialog by remember { mutableStateOf(false) }
 
     // 1. CLOSE DRAWER WHEN BACK IS PRESSED
-    // If the drawer is open, the back button will close it instead of navigating.
     BackHandler(enabled = drawerState.isOpen) {
         scope.launch { drawerState.close() }
     }
@@ -46,28 +49,40 @@ fun MainDrawerScreen(
         DrawerMenuItem("Bookmark", Screen.Bookmark.route, Icons.Default.Bookmark),
         DrawerMenuItem("About Us", Screen.AboutUs.route, Icons.Default.Info),
         DrawerMenuItem("Share", "share_action", Icons.Default.Share),
-        DrawerMenuItem("Logout", "logout_action", Icons.Default.Logout)
+        DrawerMenuItem("Logout", "logout_action", Icons.AutoMirrored.Filled.Logout)
     )
 
     ModalNavigationDrawer(
         drawerState = drawerState,
         drawerContent = {
-            ModalDrawerSheet {
+            ModalDrawerSheet(
+                modifier = Modifier.fillMaxWidth(0.75f)
+            ) {
+                Spacer(modifier = Modifier.height(24.dp))
+                
+                // Header - Removed App Logo, kept only text
+                Box(
+                    modifier = Modifier
+                        .padding(horizontal = 28.dp)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Text(
+                        text = "Quiz Master",
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
                 Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Quiz Master",
-                    modifier = Modifier.padding(16.dp),
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
-                )
                 Divider(modifier = Modifier.padding(vertical = 8.dp))
                 
                 menuItems.forEach { item ->
+                    val isSelected = currentRoute == item.route
                     NavigationDrawerItem(
                         label = { Text(text = item.title) },
-                        // 2. HIGHLIGHT CURRENT DRAWER ITEM
-                        selected = currentRoute == item.route,
+                        selected = isSelected,
                         onClick = {
                             scope.launch { drawerState.close() }
                             when (item.route) {
@@ -85,18 +100,12 @@ fun MainDrawerScreen(
                                 }
                                 else -> {
                                     if (currentRoute != item.route) {
-                                        // 3. PREVENT MULTIPLE STACKED DESTINATIONS
                                         navController.navigate(item.route) {
-                                            // Pop up to the home destination of the graph to
-                                            // avoid building up a large stack of destinations
-                                            // on the back stack as users select items
                                             popUpTo(Screen.Home.route) {
                                                 if (item.route == Screen.Home.route) {
                                                     inclusive = true
                                                 }
                                             }
-                                            // Avoid multiple copies of the same destination when
-                                            // reselecting the same item
                                             launchSingleTop = true
                                         }
                                     }
@@ -104,6 +113,15 @@ fun MainDrawerScreen(
                             }
                         },
                         icon = { Icon(item.icon, contentDescription = null) },
+                        colors = NavigationDrawerItemDefaults.colors(
+                            selectedContainerColor = Color(0xFF2B3F6C), // Gemini-style dark blue highlight
+                            selectedIconColor = Color.White,
+                            selectedTextColor = Color.White,
+                            unselectedContainerColor = Color.Transparent,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        ),
+                        shape = RoundedCornerShape(50.dp), // Pill style selection
                         modifier = Modifier.padding(NavigationDrawerItemDefaults.ItemPadding)
                     )
                 }
@@ -126,8 +144,8 @@ fun MainDrawerScreen(
             confirmButton = {
                 TextButton(
                     onClick = {
-                        showLogoutDialog = false
                         authViewModel.signOut()
+                        showLogoutDialog = false
                         navController.navigate(Screen.Login.route) {
                             popUpTo("main_flow") { inclusive = true }
                         }

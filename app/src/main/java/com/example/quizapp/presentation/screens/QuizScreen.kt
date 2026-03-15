@@ -1,5 +1,6 @@
 package com.example.quizapp.presentation.screens
 
+import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
@@ -16,6 +17,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -42,6 +44,7 @@ fun QuizScreen(
     onNavigateBack: () -> Unit,
     quizViewModel: QuizViewModel = hiltViewModel()
 ) {
+    val context = LocalContext.current
     val questionsState by quizViewModel.questions.collectAsStateWithLifecycle()
     val currentIndex by quizViewModel.currentQuestionIndex.collectAsStateWithLifecycle()
     val userAnswers by quizViewModel.userAnswers.collectAsStateWithLifecycle()
@@ -153,13 +156,23 @@ fun QuizScreen(
                             )
                             Spacer(Modifier.height(24.dp))
 
+                            val currentQuestion = questionList[currentIndex]
+                            val isBookmarked by quizViewModel.isQuestionBookmarked(currentQuestion.id).collectAsState(initial = false)
+
                             QuestionCard(
-                                question = questionList[currentIndex],
+                                question = currentQuestion,
                                 questionNumber = currentIndex + 1,
                                 selectedAnswer = userAnswers[currentIndex],
                                 answerState = answerStates[currentIndex] ?: AnswerState.UNANSWERED,
+                                isBookmarked = isBookmarked,
                                 onAnswerSelected = { answer ->
                                     quizViewModel.setAnswer(currentIndex, answer)
+                                },
+                                onBookmarkToggle = {
+                                    if (!isBookmarked) {
+                                        Toast.makeText(context, "Added to bookmarks", Toast.LENGTH_SHORT).show()
+                                    }
+                                    quizViewModel.toggleBookmark(currentQuestion)
                                 }
                             )
 
@@ -261,67 +274,86 @@ fun QuestionCard(
     questionNumber: Int,
     selectedAnswer: String?,
     answerState: AnswerState,
-    onAnswerSelected: (String) -> Unit
+    isBookmarked: Boolean,
+    onAnswerSelected: (String) -> Unit,
+    onBookmarkToggle: () -> Unit
 ) {
     val isAnswered = answerState != AnswerState.UNANSWERED
 
-    Card(elevation = CardDefaults.cardElevation(4.dp), shape = RoundedCornerShape(16.dp)) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(8.dp)) {
-                Text(
-                    text = question.questionType.name.replace("_", " "),
-                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer
-                )
-            }
-            Spacer(Modifier.height(16.dp))
-            Text("Q$questionNumber. ${question.questionText}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp)
-            Spacer(Modifier.height(20.dp))
-
-            if (question.questionType == QuestionType.MULTIPLE_CHOICE && question.options.isEmpty()) {
-                Text(
-                    text = "This multiple-choice question has no options. Please contact support or an admin.",
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.padding(vertical = 16.dp).fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-            } else {
-                val options = when (question.questionType) {
-                    QuestionType.MULTIPLE_CHOICE -> question.options
-                    QuestionType.TRUE_FALSE -> listOf("True", "False")
-                    else -> emptyList()
-                }
-
-                if (question.questionType != QuestionType.SHORT_ANSWER) {
-                    options.forEachIndexed { index, option ->
-                        val isCorrectOption = option.equals(question.correctAnswer, ignoreCase = true)
-                        val optionLabel = ('A' + index).toString()
-                        AnswerOption(
-                            text = option,
-                            optionLabel = optionLabel,
-                            isSelected = selectedAnswer == option,
-                            isCorrect = isCorrectOption,
-                            isAnswered = isAnswered,
-                            onClick = { if (!isAnswered) onAnswerSelected(option) }
-                        )
-                        Spacer(Modifier.height(12.dp))
-                    }
-                } else {
-                    OutlinedTextField(
-                        value = selectedAnswer ?: "",
-                        onValueChange = onAnswerSelected,
-                        label = { Text("Your Answer") },
-                        modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        readOnly = isAnswered
+    Card(
+        elevation = CardDefaults.cardElevation(4.dp), 
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Box(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(20.dp)) {
+                Surface(color = MaterialTheme.colorScheme.primaryContainer, shape = RoundedCornerShape(8.dp)) {
+                    Text(
+                        text = question.questionType.name.replace("_", " "),
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
                     )
                 }
+                Spacer(Modifier.height(16.dp))
+                Text("Q$questionNumber. ${question.questionText}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp)
+                Spacer(Modifier.height(20.dp))
+
+                if (question.questionType == QuestionType.MULTIPLE_CHOICE && question.options.isEmpty()) {
+                    Text(
+                        text = "This multiple-choice question has no options. Please contact support or an admin.",
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.padding(vertical = 16.dp).fillMaxWidth(),
+                        textAlign = TextAlign.Center
+                    )
+                } else {
+                    val options = when (question.questionType) {
+                        QuestionType.MULTIPLE_CHOICE -> question.options
+                        QuestionType.TRUE_FALSE -> listOf("True", "False")
+                        else -> emptyList()
+                    }
+
+                    if (question.questionType != QuestionType.SHORT_ANSWER) {
+                        options.forEachIndexed { index, option ->
+                            val isCorrectOption = option.equals(question.correctAnswer, ignoreCase = true)
+                            val optionLabel = ('A' + index).toString()
+                            AnswerOption(
+                                text = option,
+                                optionLabel = optionLabel,
+                                isSelected = selectedAnswer == option,
+                                isCorrect = isCorrectOption,
+                                isAnswered = isAnswered,
+                                onClick = { if (!isAnswered) onAnswerSelected(option) }
+                            )
+                            Spacer(Modifier.height(12.dp))
+                        }
+                    } else {
+                        OutlinedTextField(
+                            value = selectedAnswer ?: "",
+                            onValueChange = onAnswerSelected,
+                            label = { Text("Your Answer") },
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(12.dp),
+                            readOnly = isAnswered
+                        )
+                    }
+                }
+
+                AnimatedVisibility(visible = isAnswered && question.explanation?.isNotBlank() == true) {
+                    ExplanationBox(answerState = answerState, explanation = question.explanation!!)
+                }
             }
 
-            AnimatedVisibility(visible = isAnswered && question.explanation?.isNotBlank() == true) {
-                ExplanationBox(answerState = answerState, explanation = question.explanation!!)
+            IconButton(
+                onClick = onBookmarkToggle,
+                modifier = Modifier.align(Alignment.TopEnd).padding(8.dp)
+            ) {
+                Icon(
+                    imageVector = if (isBookmarked) Icons.Default.Bookmark else Icons.Default.BookmarkBorder,
+                    contentDescription = "Bookmark",
+                    tint = if (isBookmarked) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

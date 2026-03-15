@@ -25,13 +25,16 @@ class AuthViewModel @Inject constructor(
     private val _isAdmin = MutableStateFlow(authRepository.isAdmin())
     val isAdmin: StateFlow<Boolean> = _isAdmin
 
+    private val _resetPasswordState = MutableStateFlow<Resource<String>?>(null)
+    val resetPasswordState: StateFlow<Resource<String>?> = _resetPasswordState
+
     fun signUp(email: String, password: String, displayName: String) {
         viewModelScope.launch {
             _authState.value = Resource.Loading()
             val result = authRepository.signUp(email, password, displayName)
             _authState.value = result
 
-            if (result is Resource.Success) {
+            if (result is Resource.Success<User>) {
                 _isLoggedIn.value = true
             }
         }
@@ -43,10 +46,18 @@ class AuthViewModel @Inject constructor(
             val result = authRepository.signIn(email, password)
             _authState.value = result
 
-            if (result is Resource.Success) {
+            if (result is Resource.Success<User>) {
                 _isLoggedIn.value = true
                 _isAdmin.value = result.data?.isAdmin ?: false
             }
+        }
+    }
+
+    fun sendPasswordResetEmail(email: String) {
+        viewModelScope.launch {
+            _resetPasswordState.value = Resource.Loading()
+            val result = authRepository.sendPasswordResetEmail(email)
+            _resetPasswordState.value = result
         }
     }
 
@@ -56,7 +67,7 @@ class AuthViewModel @Inject constructor(
             val result = authRepository.signInAdmin(email, password)
             _authState.value = result
 
-            if (result is Resource.Success) {
+            if (result is Resource.Success<User>) {
                 _isLoggedIn.value = true
                 _isAdmin.value = true
             }
@@ -72,5 +83,9 @@ class AuthViewModel @Inject constructor(
 
     fun resetAuthState() {
         _authState.value = null
+    }
+
+    fun resetPasswordState() {
+        _resetPasswordState.value = null
     }
 }

@@ -140,7 +140,7 @@ fun AboutUsScreen(
             )
             
             Text(
-                text = "Md Danish Eqbal",
+                text = "Md Danish Eqbal | Md Reyan",
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.primary

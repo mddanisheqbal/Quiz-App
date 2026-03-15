@@ -1,9 +1,11 @@
 package com.example.quizapp.presentation.screens
 
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
@@ -19,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -41,6 +44,8 @@ fun HomeScreen(
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
     val categories by quizViewModel.categories.collectAsState()
+    val totalXP by quizViewModel.totalXP.collectAsState()
+    val userLevel by quizViewModel.userLevel.collectAsState()
     
     val drawerState = LocalDrawerState.current
     val scope = rememberCoroutineScope()
@@ -79,95 +84,149 @@ fun HomeScreen(
             )
         }
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
         ) {
-            when (categories) {
-                is Resource.Loading -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        CircularProgressIndicator()
-                    }
-                }
-                is Resource.Success -> {
-                    val categoryList = (categories as Resource.Success).data ?: emptyList()
+            // XP Progress Section
+            XPProgressSection(level = userLevel, currentXP = totalXP)
 
-                    if (categoryList.isEmpty()) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                when (categories) {
+                    is Resource.Loading -> {
+                        Box(
+                            modifier = Modifier.fillMaxSize(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator()
+                        }
+                    }
+                    is Resource.Success -> {
+                        val categoryList = (categories as Resource.Success).data ?: emptyList()
+
+                        if (categoryList.isEmpty()) {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = Icons.Default.Category,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(64.dp),
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Spacer(modifier = Modifier.height(16.dp))
+                                    Text(
+                                        text = "No categories available",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        } else {
+                            LazyVerticalGrid(
+                                columns = GridCells.Fixed(2),
+                                contentPadding = PaddingValues(16.dp),
+                                horizontalArrangement = Arrangement.spacedBy(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                items(categoryList) { category ->
+                                    CategoryCard(
+                                        category = category,
+                                        onClick = {
+                                            onNavigateToTopic(category.id, category.name)
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    is Resource.Error -> {
                         Box(
                             modifier = Modifier.fillMaxSize(),
                             contentAlignment = Alignment.Center
                         ) {
                             Column(
-                                horizontalAlignment = Alignment.CenterHorizontally
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier.padding(24.dp)
                             ) {
                                 Icon(
-                                    imageVector = Icons.Default.Category,
+                                    imageVector = Icons.Default.Error,
                                     contentDescription = null,
                                     modifier = Modifier.size(64.dp),
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    tint = MaterialTheme.colorScheme.error
                                 )
                                 Spacer(modifier = Modifier.height(16.dp))
                                 Text(
-                                    text = "No categories available",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    text = (categories as Resource.Error).message ?: "An error occurred",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = MaterialTheme.colorScheme.error
                                 )
-                            }
-                        }
-                    } else {
-                        LazyVerticalGrid(
-                            columns = GridCells.Fixed(2),
-                            contentPadding = PaddingValues(16.dp),
-                            horizontalArrangement = Arrangement.spacedBy(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            items(categoryList) { category ->
-                                CategoryCard(
-                                    category = category,
-                                    onClick = {
-                                        // Redesigned Flow: Always go to Topic (Chapter) screen first
-                                        onNavigateToTopic(category.id, category.name)
-                                    }
-                                )
-                            }
-                        }
-                    }
-                }
-                is Resource.Error -> {
-                    Box(
-                        modifier = Modifier.fillMaxSize(),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            modifier = Modifier.padding(24.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Error,
-                                contentDescription = null,
-                                modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Text(
-                                text = (categories as Resource.Error).message ?: "An error occurred",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.error
-                            )
-                            Spacer(modifier = Modifier.height(16.dp))
-                            Button(
-                                onClick = { quizViewModel.loadCategories() }
-                            ) {
-                                Text("Retry")
+                                Spacer(modifier = Modifier.height(16.dp))
+                                Button(
+                                    onClick = { quizViewModel.loadCategories() }
+                                ) {
+                                    Text("Retry")
+                                }
                             }
                         }
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun XPProgressSection(level: Int, currentXP: Int) {
+    val thresholds = listOf(0, 200, 500, 900, 1400, 2000)
+    val currentLevelXP = thresholds.getOrElse(level - 1) { 0 }
+    val nextLevelXP = thresholds.getOrElse(level) { thresholds.last() }
+    
+    val progress = if (nextLevelXP > currentLevelXP) {
+        (currentXP - currentLevelXP).toFloat() / (nextLevelXP - currentLevelXP).toFloat()
+    } else 1f
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer
+        ),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Text(
+                text = "Level $level Programmer",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSecondaryContainer
+            )
+            
+            Spacer(modifier = Modifier.height(4.dp))
+            
+            Text(
+                text = "XP: $currentXP / $nextLevelXP",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+            )
+            
+            Spacer(modifier = Modifier.height(12.dp))
+            
+            LinearProgressIndicator(
+                progress = progress.coerceIn(0f, 1f),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(8.dp)
+                    .clip(RoundedCornerShape(4.dp)),
+                color = MaterialTheme.colorScheme.primary,
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
         }
     }
 }
@@ -189,14 +248,25 @@ fun CategoryCard(
         else -> MaterialTheme.colorScheme.primary
     }
 
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        label = "scale"
+    )
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            }
             .animateContentSize()
             .clip(RoundedCornerShape(20.dp))
             .clickable(
-                interactionSource = remember { MutableInteractionSource() },
+                interactionSource = interactionSource,
                 indication = rememberRipple(bounded = true),
                 onClick = onClick
             ),
@@ -229,7 +299,6 @@ fun CategoryCard(
                         "HTML" -> Icons.Default.Language
                         "Kotlin" -> Icons.Default.Android
                         "CSS" -> Icons.Default.Web
-
                         "JavaScript" -> Icons.Default.Bolt
                         else -> Icons.Default.Quiz
                 },

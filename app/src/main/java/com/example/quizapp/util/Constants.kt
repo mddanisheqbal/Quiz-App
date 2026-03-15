@@ -8,6 +8,9 @@ object Constants {
     const val KEY_USER_EMAIL = "user_email"
     const val KEY_IS_ADMIN = "is_admin"
     const val KEY_IS_LOGGED_IN = "is_logged_in"
+    const val KEY_CURRENT_STREAK = "current_streak"
+    const val KEY_LAST_QUIZ_DATE = "last_quiz_date"
+    const val KEY_TOTAL_XP = "total_xp"
 
     // Admin Credentials (Change these!)
     const val ADMIN_EMAIL = "mddanisheqbal7667@gmail.com"
@@ -15,6 +18,8 @@ object Constants {
 
     // Quiz Settings
     const val POINTS_PER_CORRECT_ANSWER = 10
+    const val XP_PER_CORRECT_ANSWER = 10
+    const val XP_QUIZ_COMPLETED_BONUS = 50
 
     // Categories
     const val CATEGORY_JAVA = "Java"

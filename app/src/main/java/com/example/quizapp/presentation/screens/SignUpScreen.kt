@@ -1,5 +1,6 @@
 package com.example.quizapp.presentation.screens
 
+import android.util.Patterns
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -43,6 +44,8 @@ fun SignUpScreen(
     var confirmPassword by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var confirmPasswordVisible by remember { mutableStateOf(false) }
+    
+    var emailError by remember { mutableStateOf<String?>(null) }
 
     val authState by authViewModel.authState.collectAsState()
     val focusManager = LocalFocusManager.current
@@ -135,7 +138,10 @@ fun SignUpScreen(
                     // Email Field
                     OutlinedTextField(
                         value = email,
-                        onValueChange = { email = it },
+                        onValueChange = { 
+                            email = it 
+                            emailError = null // Clear error when typing
+                        },
                         label = { Text("Email") },
                         leadingIcon = {
                             Icon(Icons.Default.Email, contentDescription = null)
@@ -149,8 +155,18 @@ fun SignUpScreen(
                         ),
                         singleLine = true,
                         modifier = Modifier.fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp)
+                        shape = RoundedCornerShape(12.dp),
+                        isError = emailError != null
                     )
+                    
+                    if (emailError != null) {
+                        Text(
+                            text = emailError!!,
+                            color = MaterialTheme.colorScheme.error,
+                            fontSize = 12.sp,
+                            modifier = Modifier.padding(start = 8.dp, top = 4.dp)
+                        )
+                    }
 
                     Spacer(modifier = Modifier.height(16.dp))
 
@@ -233,6 +249,12 @@ fun SignUpScreen(
                     // Sign Up Button
                     Button(
                         onClick = {
+                            val isEmailValid = Patterns.EMAIL_ADDRESS.matcher(email).matches()
+                            if (!isEmailValid) {
+                                emailError = "Please enter a valid email address."
+                                return@Button
+                            }
+
                             if (name.isNotBlank() && email.isNotBlank() &&
                                 password.isNotBlank() && password == confirmPassword) {
                                 authViewModel.signUp(email, password, name)
@@ -244,6 +266,8 @@ fun SignUpScreen(
                         shape = RoundedCornerShape(12.dp),
                         enabled = authState !is Resource.Loading &&
                                 name.isNotBlank() &&
+                                email.isNotBlank() &&
+                                password.isNotBlank() &&
                                 password == confirmPassword
                     ) {
                         if (authState is Resource.Loading) {
@@ -260,14 +284,20 @@ fun SignUpScreen(
                         }
                     }
 
-                    // Error Message
+                    // Error Message (from ViewModel/Repository)
                     if (authState is Resource.Error) {
+                        val errorMessage = (authState as Resource.Error).message ?: "An error occurred"
                         Spacer(modifier = Modifier.height(16.dp))
                         Text(
-                            text = (authState as Resource.Error).message ?: "An error occurred",
+                            text = errorMessage,
                             color = MaterialTheme.colorScheme.error,
                             fontSize = 14.sp
                         )
+                        
+                        // Also show specifically for email if registered
+                        if (errorMessage.contains("registered", ignoreCase = true)) {
+                            emailError = errorMessage
+                        }
                     }
                 }
             }

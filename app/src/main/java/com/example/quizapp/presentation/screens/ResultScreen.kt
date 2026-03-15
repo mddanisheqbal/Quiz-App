@@ -4,7 +4,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,11 +18,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.example.quizapp.data.model.UserAnswer
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
 import com.example.quizapp.ui.theme.CorrectGreen
 import com.example.quizapp.ui.theme.GradientEnd
@@ -72,6 +70,11 @@ fun ResultScreen(
         when (quizResult) {
             is Resource.Success -> {
                 val result = (quizResult as Resource.Success).data!!
+                
+                // Filter only wrong answers for review (Incorrect and not empty)
+                val wrongAnswersForReview = result.answers.filter { (_, answer) ->
+                    !answer.isCorrect && answer.userAnswer.isNotEmpty()
+                }.toList()
 
                 LazyColumn(
                     modifier = Modifier
@@ -103,7 +106,6 @@ fun ResultScreen(
                                 Column(
                                     horizontalAlignment = Alignment.CenterHorizontally
                                 ) {
-                                    // Trophy Icon
                                     Icon(
                                         imageVector = if (result.percentage >= 70)
                                             Icons.Default.EmojiEvents
@@ -186,7 +188,7 @@ fun ResultScreen(
                                     StatItem(
                                         icon = Icons.Default.HelpOutline,
                                         value = result.skippedAnswers.toString(),
-                                        label = "Skipped",
+                                        label = "Not Attempted",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
@@ -223,7 +225,7 @@ fun ResultScreen(
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
                                         Text(
-                                            text = result.categoryName,
+                                            text = result.categoryName.ifEmpty { "General" },
                                             fontSize = 18.sp,
                                             fontWeight = FontWeight.SemiBold
                                         )
@@ -233,22 +235,23 @@ fun ResultScreen(
                         }
                     }
 
-                    // Review Answers Header
-                    item {
-                        Text(
-                            text = "Review Answers",
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(vertical = 8.dp)
-                        )
-                    }
+                    // Review Answers Section (Only Wrong Answers)
+                    if (wrongAnswersForReview.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "Review Wrong Answers",
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
 
-                    // Answer Review Items
-                    itemsIndexed(result.answers.values.toList()) { index, answer ->
-                        AnswerReviewCard(
-                            questionNumber = index + 1,
-                            answer = answer
-                        )
+                        items(wrongAnswersForReview) { (key, answer) ->
+                            AnswerReviewCard(
+                                questionNumber = key.toInt() + 1,
+                                answer = answer
+                            )
+                        }
                     }
 
                     // Action Buttons
@@ -360,9 +363,7 @@ fun AnswerReviewCard(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (answer.isCorrect)
-                CorrectGreen.copy(alpha = 0.1f)
-            else IncorrectRed.copy(alpha = 0.1f)
+            containerColor = IncorrectRed.copy(alpha = 0.1f)
         )
     ) {
         Column(
@@ -375,15 +376,11 @@ fun AnswerReviewCard(
                     modifier = Modifier
                         .size(32.dp)
                         .clip(CircleShape)
-                        .background(
-                            if (answer.isCorrect) CorrectGreen else IncorrectRed
-                        ),
+                        .background(IncorrectRed),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = if (answer.isCorrect)
-                            Icons.Default.Check
-                        else Icons.Default.Close,
+                        imageVector = Icons.Default.Close,
                         contentDescription = null,
                         tint = Color.White,
                         modifier = Modifier.size(20.dp)
