@@ -5,8 +5,8 @@ sealed class Screen(val route: String) {
     object Login : Screen("login")
     object SignUp : Screen("signup")
     object Home : Screen("home")
-    object Chapter : Screen("chapter/{categoryId}/{categoryName}") {
-        fun createRoute(categoryId: String, categoryName: String) = "chapter/$categoryId/$categoryName"
+    object Chapter : Screen("chapter/{categoryId}/{categoryName}/{categoryColor}") {
+        fun createRoute(categoryId: String, categoryName: String, categoryColor: String) = "chapter/$categoryId/$categoryName/$categoryColor"
     }
     object Quiz : Screen("quiz/{categoryId}/{topicId}/{topicName}") {
         fun createRoute(categoryId: String, topicId: String, topicName: String) = "quiz/$categoryId/$topicId/$topicName"
@@ -15,6 +15,9 @@ sealed class Screen(val route: String) {
     object History : Screen("history")
     object Bookmark : Screen("bookmark")
     object AboutUs : Screen("about_us")
+    object LevelProgress : Screen("level_progress")
+    object StreakDetails : Screen("streak_details")
+    object Leaderboard : Screen("leaderboard")
     object AdminLogin : Screen("admin_login")
     object AdminDashboard : Screen("admin_dashboard")
     object ManageCategories : Screen("manage_categories")

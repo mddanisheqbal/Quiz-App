@@ -1,9 +1,6 @@
 package com.example.quizapp.data.repository
 
-import com.example.quizapp.data.model.Category
-import com.example.quizapp.data.model.Question
-import com.example.quizapp.data.model.QuizResult
-import com.example.quizapp.data.model.Topic
+import com.example.quizapp.data.model.*
 import com.example.quizapp.util.Resource
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
@@ -23,6 +20,7 @@ class QuizRepository @Inject constructor(
     private val topicsCollection = firestore.collection("topics")
     private val questionsCollection = firestore.collection("questions")
     private val resultsCollection = firestore.collection("results")
+    private val usersCollection = firestore.collection("users")
 
     /**
      * Real-time categories stream
@@ -54,7 +52,6 @@ class QuizRepository @Inject constructor(
             .orderBy("order", Query.Direction.ASCENDING)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
-                    // Fallback to hardcoded on error if needed, or just send error
                     trySend(Resource.Error(error.message ?: "Stream error"))
                     return@addSnapshotListener
                 }
@@ -86,7 +83,66 @@ class QuizRepository @Inject constructor(
         awaitClose { subscription.remove() }
     }
 
-    // --- Legacy / One-time Methods (Keep for compatibility if needed) ---
+    /**
+     * Real-time stream for ALL questions
+     */
+    fun getAllQuestionsFlow(): Flow<Resource<List<Question>>> = callbackFlow {
+        trySend(Resource.Loading())
+        val subscription = questionsCollection
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(Resource.Error(error.message ?: "Stream error"))
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val questions = snapshot.toObjects(Question::class.java)
+                    trySend(Resource.Success(questions))
+                }
+            }
+        awaitClose { subscription.remove() }
+    }
+
+    /**
+     * Fetch user profile from Firestore
+     */
+    fun getUserProfileFlow(userId: String): Flow<Resource<User>> = callbackFlow {
+        trySend(Resource.Loading())
+        val subscription = usersCollection.document(userId)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(Resource.Error(error.message ?: "Stream error"))
+                    return@addSnapshotListener
+                }
+                if (snapshot != null && snapshot.exists()) {
+                    val user = snapshot.toObject(User::class.java)
+                    if (user != null) {
+                        trySend(Resource.Success(user))
+                    }
+                }
+            }
+        awaitClose { subscription.remove() }
+    }
+
+    /**
+     * Fetch top users for leaderboard
+     */
+    fun getLeaderboardFlow(): Flow<Resource<List<User>>> = callbackFlow {
+        trySend(Resource.Loading())
+        val subscription = usersCollection
+            .orderBy("totalXP", Query.Direction.DESCENDING)
+            .limit(20)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(Resource.Error(error.message ?: "Stream error"))
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val users = snapshot.toObjects(User::class.java)
+                    trySend(Resource.Success(users))
+                }
+            }
+        awaitClose { subscription.remove() }
+    }
 
     suspend fun getCategories(): Resource<List<Category>> {
         return try {
@@ -95,29 +151,6 @@ class QuizRepository @Inject constructor(
             Resource.Success(categories)
         } catch (e: Exception) {
             Resource.Error(e.message ?: "Failed to fetch categories")
-        }
-    }
-
-    suspend fun getTopicsByCategory(categoryId: String): Resource<List<Topic>> {
-        return try {
-            val snapshot = topicsCollection
-                .whereEqualTo("categoryId", categoryId)
-                .orderBy("order", Query.Direction.ASCENDING)
-                .get()
-                .await()
-            val topics = snapshot.toObjects(Topic::class.java)
-            Resource.Success(topics)
-        } catch (e: Exception) {
-            Resource.Error("Failed to fetch topics")
-        }
-    }
-
-    suspend fun getQuestionsByChapter(chapterId: String): Resource<List<Question>> {
-        return try {
-            val snapshot = questionsCollection.whereEqualTo("chapterId", chapterId).get().await()
-            Resource.Success(snapshot.toObjects(Question::class.java))
-        } catch (e: Exception) {
-            Resource.Error("Failed to fetch questions")
         }
     }
 

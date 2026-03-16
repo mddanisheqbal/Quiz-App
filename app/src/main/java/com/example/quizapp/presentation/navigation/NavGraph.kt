@@ -82,13 +82,16 @@ fun NavGraph(
             composable(Screen.Home.route) {
                 MainDrawerScreen(navController = navController) {
                     HomeScreen(
-                        onNavigateToTopic = { categoryId, categoryName ->
-                            navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName))
+                        onNavigateToTopic = { categoryId, categoryName, categoryColor ->
+                            navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName, categoryColor))
                         },
                         onNavigateToQuiz = { categoryId, categoryName ->
-                            navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName))
+                            // This navigate logic is usually handled through chapters
                         },
                         onNavigateToHistory = { navController.navigate(Screen.History.route) },
+                        onNavigateToLevelProgress = { navController.navigate(Screen.LevelProgress.route) },
+                        onNavigateToStreakDetails = { navController.navigate(Screen.StreakDetails.route) },
+                        onNavigateToLeaderboard = { navController.navigate(Screen.Leaderboard.route) },
                         onLogout = {
                             navController.navigate(Screen.Login.route) {
                                 popUpTo("main_flow") { inclusive = true }
@@ -102,15 +105,18 @@ fun NavGraph(
                 route = Screen.Chapter.route,
                 arguments = listOf(
                     navArgument("categoryId") { type = NavType.StringType },
-                    navArgument("categoryName") { type = NavType.StringType }
+                    navArgument("categoryName") { type = NavType.StringType },
+                    navArgument("categoryColor") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
                 val categoryId = backStackEntry.arguments?.getString("categoryId") ?: ""
                 val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
+                val categoryColor = backStackEntry.arguments?.getString("categoryColor") ?: ""
                 
                 ChapterScreen(
                     categoryId = categoryId,
                     categoryName = categoryName,
+                    categoryColorString = categoryColor,
                     onNavigateToQuiz = { catId, topicId, topicName ->
                         navController.navigate(Screen.Quiz.createRoute(catId, topicId, topicName))
                     },
@@ -174,6 +180,18 @@ fun NavGraph(
                 MainDrawerScreen(navController = navController) {
                     AboutUsScreen(onNavigateBack = { navController.popBackStack() })
                 }
+            }
+
+            composable(Screen.LevelProgress.route) {
+                LevelProgressScreen(onNavigateBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.StreakDetails.route) {
+                StreakScreen(onNavigateBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.Leaderboard.route) {
+                LeaderboardScreen(onNavigateBack = { navController.popBackStack() })
             }
         }
 

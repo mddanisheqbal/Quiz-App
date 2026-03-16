@@ -7,6 +7,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.MenuBook
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -15,11 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.quizapp.data.model.Topic
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
-import com.example.quizapp.ui.theme.*
 import com.example.quizapp.util.Resource
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -27,6 +27,7 @@ import com.example.quizapp.util.Resource
 fun ChapterScreen(
     categoryId: String,
     categoryName: String,
+    categoryColorString: String,
     onNavigateToQuiz: (String, String, String) -> Unit,
     onNavigateBack: () -> Unit,
     quizViewModel: QuizViewModel = hiltViewModel()
@@ -38,17 +39,17 @@ fun ChapterScreen(
         quizViewModel.loadTopics(categoryId)
     }
 
-    val categoryColor = when (categoryName) {
-        "Java" -> JavaColor
-        "Python" -> PythonColor
-        "Kotlin" -> KotlinColor
-        "C++" -> CppColor
-        "C" -> Color(0xFF00599C)
-        "HTML" -> Color(0xFFE34F26)
-        "CSS" -> Color(0xFF1572B6)
-        "JavaScript" -> Color(0xFFF7DF1E)
-        else -> MaterialTheme.colorScheme.primary
+    val defaultColor = MaterialTheme.colorScheme.primary
+    val categoryColor = remember(categoryColorString) {
+        try {
+            Color(categoryColorString.toLong())
+        } catch (e: Exception) {
+            defaultColor
+        }
     }
+
+    // Determine content color based on luminance for better readability
+    val contentColor = if (categoryName == "JavaScript" || categoryName == "HTML") Color.Black else Color.White
 
     Scaffold(
         topBar = {
@@ -57,17 +58,17 @@ fun ChapterScreen(
                     title = { Text("$categoryName Chapters", fontWeight = FontWeight.Bold) },
                     navigationIcon = {
                         IconButton(onClick = onNavigateBack) {
-                            Icon(Icons.Default.ArrowBack, contentDescription = "Back")
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = categoryColor,
-                        titleContentColor = if (categoryName == "JavaScript") Color.Black else Color.White,
-                        navigationIconContentColor = if (categoryName == "JavaScript") Color.Black else Color.White
+                        titleContentColor = contentColor,
+                        navigationIconContentColor = contentColor
                     )
                 )
                 
-                // Search Bar
+                // Search Bar Area with same category color
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -123,7 +124,7 @@ fun ChapterScreen(
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                 Icon(
-                                    imageVector = Icons.Default.MenuBook,
+                                    imageVector = Icons.AutoMirrored.Filled.MenuBook,
                                     contentDescription = null,
                                     modifier = Modifier.size(64.dp),
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)

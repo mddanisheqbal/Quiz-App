@@ -2,6 +2,7 @@ package com.example.quizapp.di
 
 import android.content.Context
 import com.example.quizapp.util.PreferencesManager
+import com.example.quizapp.util.UserActivityManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -17,5 +18,11 @@ object AppModule {
     @Singleton
     fun providePreferencesManager(@ApplicationContext context: Context): PreferencesManager {
         return PreferencesManager(context)
+    }
+
+    @Provides
+    @Singleton
+    fun provideUserActivityManager(@ApplicationContext context: Context): UserActivityManager {
+        return UserActivityManager(context)
     }
 }

@@ -6,9 +6,7 @@ import com.example.quizapp.data.local.BookmarkDao
 import com.example.quizapp.data.local.BookmarkEntity
 import com.example.quizapp.data.model.*
 import com.example.quizapp.data.repository.QuizRepository
-import com.example.quizapp.util.Constants
-import com.example.quizapp.util.PreferencesManager
-import com.example.quizapp.util.Resource
+import com.example.quizapp.util.*
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Job
@@ -27,7 +25,10 @@ enum class AnswerState {
 class QuizViewModel @Inject constructor(
     private val quizRepository: QuizRepository,
     private val prefsManager: PreferencesManager,
-    private val bookmarkDao: BookmarkDao
+    private val bookmarkDao: BookmarkDao,
+    private val streakManager: StreakManager,
+    private val dailyChallengeManager: DailyChallengeManager,
+    private val userActivityManager: UserActivityManager
 ) : ViewModel() {
 
     private val _categories = MutableStateFlow<Resource<List<Category>>>(Resource.Loading())
@@ -60,6 +61,15 @@ class QuizViewModel @Inject constructor(
     private val _userLevel = MutableStateFlow(calculateLevel(prefsManager.getTotalXP()))
     val userLevel: StateFlow<Int> = _userLevel
 
+    private val _dailyChallengeCompleted = MutableStateFlow(false)
+    val dailyChallengeCompleted: StateFlow<Boolean> = _dailyChallengeCompleted
+
+    private val _streakCount = MutableStateFlow(0)
+    val streakCount: StateFlow<Int> = _streakCount
+
+    private val _leaderboard = MutableStateFlow<Resource<List<User>>>(Resource.Loading())
+    val leaderboard: StateFlow<Resource<List<User>>> = _leaderboard
+
     val bookmarkedQuestions: StateFlow<List<BookmarkEntity>> = bookmarkDao.getAllBookmarks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -68,6 +78,7 @@ class QuizViewModel @Inject constructor(
     private var currentCategoryName = ""
     private var currentChapterId = ""
     private var currentChapterName = ""
+    private var isDailyChallenge = false
     private var quizStartTime = 0L
 
     private var categoriesJob: Job? = null
@@ -83,6 +94,39 @@ class QuizViewModel @Inject constructor(
                 _categories.value = it
             }
         }
+        checkStreakAndChallenge()
+        recordAppOpen()
+    }
+
+    private fun recordAppOpen() {
+        userActivityManager.recordAppOpen()
+    }
+
+    private fun checkStreakAndChallenge() {
+        viewModelScope.launch {
+            val completed = dailyChallengeManager.checkAndResetDailyChallenge()
+            _dailyChallengeCompleted.value = completed
+            
+            val userId = FirebaseAuth.getInstance().currentUser?.uid
+            if (userId != null) {
+                quizRepository.getUserProfileFlow(userId).collect { resource ->
+                    if (resource is Resource.Success<User>) {
+                        val user = resource.data!!
+                        _totalXP.value = user.totalXP
+                        _userLevel.value = calculateLevel(user.totalXP)
+                        _streakCount.value = user.streakCount
+                    }
+                }
+            }
+        }
+    }
+
+    fun loadLeaderboard() {
+        viewModelScope.launch {
+            quizRepository.getLeaderboardFlow().collect {
+                _leaderboard.value = it
+            }
+        }
     }
 
     fun loadTopics(categoryId: String) {
@@ -94,9 +138,51 @@ class QuizViewModel @Inject constructor(
         }
     }
 
+    fun startDailyChallenge() {
+        viewModelScope.launch {
+            isDailyChallenge = true
+            isSessionInitialized = false
+            _questions.value = Resource.Loading()
+            _currentQuestionIndex.value = 0
+            _userAnswers.value.clear()
+            _answerState.value = emptyMap()
+            _timeRemaining.value = -1
+            _quizResult.value = null
+
+            currentCategoryId = "daily_challenge"
+            currentCategoryName = "Daily Challenge"
+            currentChapterId = "daily"
+            currentChapterName = "Daily Challenge"
+            currentQuizId = UUID.randomUUID().toString()
+            quizStartTime = System.currentTimeMillis()
+
+            quizRepository.getAllQuestionsFlow().collect { result ->
+                when (result) {
+                    is Resource.Success<List<Question>> -> {
+                        if (!isSessionInitialized) {
+                            val shuffled = result.data?.shuffled()?.take(10).orEmpty()
+                            _questions.value = Resource.Success(shuffled)
+                            val totalTime = shuffled.sumOf { it.timeLimit }
+                            _timeRemaining.value = totalTime
+                            isSessionInitialized = true
+                        }
+                    }
+                    is Resource.Error -> {
+                        _questions.value = Resource.Error(result.message ?: "Failed to load questions")
+                        _timeRemaining.value = 0
+                    }
+                    is Resource.Loading -> {
+                        _questions.value = Resource.Loading()
+                    }
+                }
+            }
+        }
+    }
+
     fun loadQuestions(categoryId: String, chapterId: String, chapterName: String) {
         questionsJob?.cancel()
         questionsJob = viewModelScope.launch {
+            isDailyChallenge = false
             isSessionInitialized = false
             _questions.value = Resource.Loading()
             _currentQuestionIndex.value = 0
@@ -106,7 +192,7 @@ class QuizViewModel @Inject constructor(
             _quizResult.value = null
 
             currentCategoryId = categoryId
-            currentCategoryName = "" // Will be updated if available
+            currentCategoryName = "" 
             currentChapterId = chapterId
             currentChapterName = chapterName
             currentQuizId = UUID.randomUUID().toString()
@@ -114,7 +200,7 @@ class QuizViewModel @Inject constructor(
 
             quizRepository.getQuestionsByChapterFlow(chapterId).collect { result ->
                 when (result) {
-                    is Resource.Success -> {
+                    is Resource.Success<List<Question>> -> {
                         if (!isSessionInitialized) {
                             val shuffled = result.data?.shuffled().orEmpty()
                             _questions.value = Resource.Success(shuffled)
@@ -124,11 +210,11 @@ class QuizViewModel @Inject constructor(
                         }
                     }
                     is Resource.Error -> {
-                        _questions.value = result
+                        _questions.value = Resource.Error(result.message ?: "Failed to load questions")
                         _timeRemaining.value = 0
                     }
                     is Resource.Loading -> {
-                        _questions.value = result
+                        _questions.value = Resource.Loading()
                     }
                 }
             }
@@ -235,8 +321,20 @@ class QuizViewModel @Inject constructor(
 
             val saveResult = quizRepository.saveQuizResult(result)
             if (saveResult is Resource.Success) {
-                val earnedXP = (correct * Constants.XP_PER_CORRECT_ANSWER) + Constants.XP_QUIZ_COMPLETED_BONUS
+                var earnedXP = (correct * Constants.XP_PER_CORRECT_ANSWER)
+                
+                if (isDailyChallenge) {
+                    earnedXP += Constants.XP_DAILY_CHALLENGE_BONUS
+                    dailyChallengeManager.markChallengeAsCompleted()
+                    _dailyChallengeCompleted.value = true
+                }
+                
+                if (percentage >= 100f) {
+                    earnedXP += Constants.XP_PERFECT_QUIZ_BONUS
+                }
+                
                 addXP(earnedXP)
+                _streakCount.value = streakManager.updateDailyStreak()
                 _quizResult.value = Resource.Success(result)
             } else {
                 _quizResult.value = Resource.Error(saveResult.message ?: "Failed to save result")
@@ -255,13 +353,16 @@ class QuizViewModel @Inject constructor(
     }
 
     private fun calculateLevel(xp: Int): Int {
-        return when {
-            xp >= 1400 -> 5
-            xp >= 900 -> 4
-            xp >= 500 -> 3
-            xp >= 200 -> 2
-            else -> 1
+        val thresholds = Constants.LEVEL_THRESHOLDS
+        var level = 1
+        for (i in 1 until thresholds.size) {
+            if (xp >= thresholds[i]) {
+                level = i + 1
+            } else {
+                break
+            }
         }
+        return level
     }
 
     fun toggleBookmark(question: Question) {
@@ -295,6 +396,7 @@ class QuizViewModel @Inject constructor(
 
     fun resetQuiz() {
         isSessionInitialized = false
+        isDailyChallenge = false
         _questions.value = Resource.Loading()
         _currentQuestionIndex.value = 0
         _userAnswers.value.clear()

@@ -18,8 +18,23 @@ object Constants {
 
     // Quiz Settings
     const val POINTS_PER_CORRECT_ANSWER = 10
-    const val XP_PER_CORRECT_ANSWER = 10
-    const val XP_QUIZ_COMPLETED_BONUS = 50
+    const val XP_PER_CORRECT_ANSWER = 5
+    const val XP_PERFECT_QUIZ_BONUS = 10
+    const val XP_DAILY_CHALLENGE_BONUS = 25
+
+    // Level Thresholds
+    val LEVEL_THRESHOLDS = listOf(
+        0,      // Level 1
+        300,    // Level 2
+        700,    // Level 3
+        1200,   // Level 4
+        1800,   // Level 5
+        2500,   // Level 6
+        3500,   // Level 7
+        4700,   // Level 8
+        6000,   // Level 9
+        7500    // Level 10
+    )
 
     // Categories
     const val CATEGORY_JAVA = "Java"
