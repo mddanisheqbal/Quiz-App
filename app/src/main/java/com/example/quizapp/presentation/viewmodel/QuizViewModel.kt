@@ -1,5 +1,6 @@
 package com.example.quizapp.presentation.viewmodel
 
+import android.app.Activity
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -7,6 +8,7 @@ import com.example.quizapp.data.local.BookmarkDao
 import com.example.quizapp.data.local.BookmarkEntity
 import com.example.quizapp.data.local.QuizSessionEntity
 import com.example.quizapp.data.model.*
+import com.example.quizapp.data.repository.CoinsManager
 import com.example.quizapp.data.repository.QuizRepository
 import com.example.quizapp.util.*
 import com.google.firebase.auth.FirebaseAuth
@@ -27,10 +29,12 @@ class QuizViewModel @Inject constructor(
     private val quizRepository: QuizRepository,
     private val prefsManager: PreferencesManager,
     private val bookmarkDao: BookmarkDao,
-    private val networkUtils: NetworkUtils
+    private val networkUtils: NetworkUtils,
+    private val coinsManager: CoinsManager,
+    private val dailyRewardManager: DailyRewardManager,
+    private val rewardedAdManager: RewardedAdManager
 ) : ViewModel() {
 
-    // FEATURE 7 — SAFE STATE FLOW
     private val _quizSession = MutableStateFlow<QuizSessionEntity?>(null)
     val quizSession: StateFlow<QuizSessionEntity?> = _quizSession
 
@@ -46,7 +50,6 @@ class QuizViewModel @Inject constructor(
     private val _currentQuestionIndex = MutableStateFlow(0)
     val currentQuestionIndex: StateFlow<Int> = _currentQuestionIndex
 
-    // FEATURE 3 — SAVE ANSWERS BY QUESTION ID
     private val _selectedAnswers = MutableStateFlow<Map<String, String>>(emptyMap())
     val selectedAnswers: StateFlow<Map<String, String>> = _selectedAnswers
 
@@ -65,11 +68,9 @@ class QuizViewModel @Inject constructor(
     private val _timeRemaining = MutableStateFlow(0)
     val timeRemaining: StateFlow<Int> = _timeRemaining
 
-    // FEATURE 8 — VIEWMODEL UPDATE (Stars)
     private val _stars = MutableStateFlow(0)
     val stars: StateFlow<Int> = _stars
 
-    // Additional UI states
     private val _categories = MutableStateFlow<Resource<List<Category>>>(Resource.Loading())
     val categories: StateFlow<Resource<List<Category>>> = _categories
 
@@ -91,7 +92,7 @@ class QuizViewModel @Inject constructor(
     private val _dailyChallengeCompleted = MutableStateFlow(false)
     val dailyChallengeCompleted: StateFlow<Boolean> = _dailyChallengeCompleted
 
-    private val _topicProgress = MutableStateFlow<Map<String, Int>>(emptyMap()) // Changed to Int for stars
+    private val _topicProgress = MutableStateFlow<Map<String, Int>>(emptyMap())
     val topicProgress: StateFlow<Map<String, Int>> = _topicProgress
 
     private val _leaderboard = MutableStateFlow<Resource<List<User>>>(Resource.Loading())
@@ -109,6 +110,23 @@ class QuizViewModel @Inject constructor(
     private val _isOnline = MutableStateFlow(networkUtils.isNetworkAvailable())
     val isOnline: StateFlow<Boolean> = _isOnline
 
+    // Feature 9: Coins State
+    private val _coins = MutableStateFlow(0)
+    val coins: StateFlow<Int> = _coins
+
+    private val _dailyRewardAmount = MutableStateFlow<Int?>(null)
+    val dailyRewardAmount: StateFlow<Int?> = _dailyRewardAmount
+
+    private val _showDailyRewardDialog = MutableStateFlow(false)
+    val showDailyRewardDialog: StateFlow<Boolean> = _showDailyRewardDialog
+
+    // Power-up States
+    private val _isHintVisible = MutableStateFlow(false)
+    val isHintVisible: StateFlow<Boolean> = _isHintVisible
+
+    private val _removedOptions = MutableStateFlow<Set<String>>(emptySet())
+    val removedOptions: StateFlow<Set<String>> = _removedOptions
+
     val bookmarkedQuestions: StateFlow<List<BookmarkEntity>> = bookmarkDao.getAllBookmarks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -125,6 +143,7 @@ class QuizViewModel @Inject constructor(
     init {
         restoreUserData()
         observeNetwork()
+        checkDailyReward()
     }
 
     private fun observeNetwork() {
@@ -145,6 +164,7 @@ class QuizViewModel @Inject constructor(
                 _streakCount.value = user.streak
                 _userLevel.value = user.level
                 _dailyChallengeCompleted.value = user.dailyChallengeCompleted
+                _coins.value = user.coins
                 prefsManager.setTotalXP(user.totalXP)
             }
             
@@ -159,6 +179,98 @@ class QuizViewModel @Inject constructor(
         }
     }
 
+    private fun checkDailyReward() {
+        viewModelScope.launch {
+            if (networkUtils.isNetworkAvailable()) {
+                val reward = dailyRewardManager.checkAndClaimDailyReward()
+                if (reward != null) {
+                    _dailyRewardAmount.value = reward
+                    _showDailyRewardDialog.value = true
+                    refreshCoins()
+                }
+            }
+        }
+    }
+
+    fun dismissDailyRewardDialog() {
+        _showDailyRewardDialog.value = false
+        _dailyRewardAmount.value = null
+    }
+
+    private fun refreshCoins() {
+        viewModelScope.launch {
+            _coins.value = coinsManager.getCoins()
+        }
+    }
+
+    fun showRewardedAd(activity: Activity) {
+        if (!networkUtils.isNetworkAvailable()) return
+        
+        rewardedAdManager.showRewardedAd(
+            activity = activity,
+            onRewardEarned = { amount ->
+                viewModelScope.launch {
+                    val rewardCoins = 20 + (Math.random() * 30).toInt()
+                    coinsManager.addCoins(rewardCoins)
+                    refreshCoins()
+                }
+            },
+            onAdDismissed = {
+                // Handle dismissal
+            }
+        )
+    }
+
+    fun isAdLoaded(): Boolean = rewardedAdManager.isAdLoaded()
+
+    // Feature 8: Coins Usage Implementation
+    fun useHint(): Boolean {
+        if (coins.value >= 10 && !_isHintVisible.value) {
+            viewModelScope.launch {
+                if (coinsManager.spendCoins(10)) {
+                    refreshCoins()
+                    _isHintVisible.value = true
+                }
+            }
+            return true
+        }
+        return false
+    }
+
+    fun skipQuestionPowerUp(): Boolean {
+        if (coins.value >= 15) {
+            viewModelScope.launch {
+                if (coinsManager.spendCoins(15)) {
+                    refreshCoins()
+                    nextQuestion()
+                }
+            }
+            return true
+        }
+        return false
+    }
+
+    fun removeTwoOptionsPowerUp() {
+        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value) ?: return
+        if (currentQuestion.questionType != QuestionType.MULTIPLE_CHOICE) return
+        if (currentQuestion.options.size < 3) return
+        if (_removedOptions.value.isNotEmpty()) return
+
+        if (coins.value >= 10) {
+            viewModelScope.launch {
+                if (coinsManager.spendCoins(10)) {
+                    refreshCoins()
+                    val options = currentQuestion.options.toMutableList()
+                    val correct = currentQuestion.correctAnswer
+                    options.remove(correct)
+                    options.shuffle()
+                    val toRemove = options.take(2).toSet()
+                    _removedOptions.value = toRemove
+                }
+            }
+        }
+    }
+
     fun loadQuestions(categoryId: String, chapterId: String, chapterName: String) {
         viewModelScope.launch {
             isDailyChallenge = false
@@ -166,6 +278,8 @@ class QuizViewModel @Inject constructor(
             _quizResult.value = null
             _xpAwardedInThisSession.value = null
             _stars.value = 0
+            _isHintVisible.value = false
+            _removedOptions.value = emptySet()
 
             currentCategoryId = categoryId
             currentChapterId = chapterId
@@ -208,9 +322,6 @@ class QuizViewModel @Inject constructor(
             _currentQuestionIndex.value = session.currentIndex
             quizStartTime = session.startedAt
             
-            Log.d("QUIZ_DEBUG", "Resumed Order: ${session.questionOrder}")
-            Log.d("QUIZ_DEBUG", "Resumed Answers: ${session.answers}")
-
             fetchQuestions(session.chapterId, isResuming = true, savedOrder = session.questionOrder)
         }
     }
@@ -285,8 +396,6 @@ class QuizViewModel @Inject constructor(
                 
                 isSessionInitialized = true
                 _isLoading.value = false
-
-                Log.d("QUIZ_DEBUG", "Final Order: ${finalQuestions.map { it.id }}")
                 
                 if (finalQuestions.isNotEmpty()) {
                     val currentQId = finalQuestions.getOrNull(_currentQuestionIndex.value)?.id
@@ -307,9 +416,6 @@ class QuizViewModel @Inject constructor(
         if (!answers.containsKey(questionId)) {
             answers[questionId] = answer
             _selectedAnswers.value = answers
-            
-            Log.d("QUIZ_DEBUG", "Answers: $answers")
-            
             checkAnswer(questionId, answer)
             
             val updatedSession = currentSession.copy(
@@ -375,6 +481,9 @@ class QuizViewModel @Inject constructor(
     }
 
     private fun updateNavState() {
+        _isHintVisible.value = false
+        _removedOptions.value = emptySet()
+        
         val questionsList = _questions.value
         val currentIndex = _currentQuestionIndex.value
         val currentQuestion = questionsList.getOrNull(currentIndex) ?: return
@@ -389,7 +498,6 @@ class QuizViewModel @Inject constructor(
         }
     }
 
-    // FEATURE 1 & 9 — STAR CALCULATION & EDGE CASE HANDLING
     fun submitQuiz() {
         val session = _quizSession.value ?: return
         val questionsList = _questions.value
@@ -414,7 +522,6 @@ class QuizViewModel @Inject constructor(
                     correctAnswerMap[qId].equals(ans, ignoreCase = true) 
                 }
                 
-                // FEATURE 1 — STAR CALCULATION LOGIC
                 val percentage = if (totalQuestionsCount > 0) (correctCount * 100) / totalQuestionsCount else 0
                 val starsEarned = when {
                     percentage >= 90 -> 3
@@ -423,6 +530,15 @@ class QuizViewModel @Inject constructor(
                     else -> 0
                 }
                 _stars.value = starsEarned
+
+                var bonusCoins = 5
+                if (starsEarned == 3) bonusCoins = 10
+                
+                if (_streakCount.value >= 5) {
+                    bonusCoins += _streakCount.value * 2
+                }
+                
+                coinsManager.addCoins(bonusCoins)
 
                 var totalScore = 0
                 val answersMap = mutableMapOf<String, UserAnswer>()
@@ -459,7 +575,6 @@ class QuizViewModel @Inject constructor(
                 val saveResult = quizRepository.saveQuizResult(result)
                 
                 if (saveResult is Resource.Success) {
-                    // FEATURE 2 — SAVE STARS IN FIRESTORE
                     val progressResult = quizRepository.updateTopicProgressWithStars(
                         userId = userId,
                         topicId = currentChapterId,
@@ -478,13 +593,13 @@ class QuizViewModel @Inject constructor(
                             quizRepository.markQuizAsCompleted(userId, currentQuizId, xp)
                         }
 
-                        // FEATURE 5 — UNLOCK RULE WITH STARS
                         if (starsEarned >= 2) {
                             unlockNextChapter(userId)
                         }
                         
                         quizRepository.deleteQuizSession(userId, currentChapterId)
-                        restoreTopicProgress(userId) // Refresh progress map
+                        restoreTopicProgress(userId)
+                        refreshCoins()
                         _quizResult.value = Resource.Success(result)
                     } else {
                         _quizResult.value = Resource.Error(progressResult.message ?: "Failed to save progress")
@@ -585,6 +700,8 @@ class QuizViewModel @Inject constructor(
         _answerState.value = emptyMap()
         _currentQuestionIndex.value = 0
         _stars.value = 0
+        _isHintVisible.value = false
+        _removedOptions.value = emptySet()
         isSessionInitialized = false
     }
 }

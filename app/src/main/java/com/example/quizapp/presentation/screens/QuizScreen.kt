@@ -4,9 +4,11 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -57,6 +59,11 @@ fun QuizScreen(
     val isBookmarked by quizViewModel.isBookmarked.collectAsStateWithLifecycle()
     val showResumeDialog by quizViewModel.showResumeDialog.collectAsStateWithLifecycle()
     val resumeMessage by quizViewModel.resumeMessage.collectAsStateWithLifecycle()
+    
+    // Feature 8: Power-ups
+    val coins by quizViewModel.coins.collectAsStateWithLifecycle()
+    val isHintVisible by quizViewModel.isHintVisible.collectAsStateWithLifecycle()
+    val removedOptions by quizViewModel.removedOptions.collectAsStateWithLifecycle()
 
     var showExitDialog by remember { mutableStateOf(false) }
     var showSubmitDialog by remember { mutableStateOf(false) }
@@ -123,19 +130,28 @@ fun QuizScreen(
                     }
                 },
                 actions = {
-                    // FEATURE 2 — DISABLE SUBMIT BUTTON EARLY
-                    val isAllAnswered = selectedAnswers.size == questions.size
-                    if (questions.isNotEmpty() && currentIndex == questions.size - 1) {
-                        if (isAllAnswered) {
-                            TextButton(onClick = { showSubmitDialog = true }) {
-                                Text("Submit Quiz", color = MaterialTheme.colorScheme.onPrimary)
-                            }
-                        } else {
+                    // Feature 10: Coins Display in Quiz TopBar
+                    Surface(
+                        modifier = Modifier.padding(end = 8.dp),
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.Black.copy(alpha = 0.2f)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MonetizationOn,
+                                contentDescription = null,
+                                tint = Color(0xFFFFD700),
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
                             Text(
-                                "Finish all to submit",
-                                fontSize = 12.sp,
-                                modifier = Modifier.padding(end = 16.dp),
-                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                                text = coins.toString(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 12.sp
                             )
                         }
                     }
@@ -177,7 +193,6 @@ fun QuizScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
-                    // FEATURE 7 — UX IMPROVEMENT (Progress display)
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -203,7 +218,27 @@ fun QuizScreen(
                         progress = (currentIndex + 1).toFloat() / questions.size,
                         modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
                     )
-                    Spacer(Modifier.height(24.dp))
+                    
+                    // Feature 8: Power-ups Bar
+                    Spacer(Modifier.height(16.dp))
+                    PowerUpsBar(
+                        coins = coins,
+                        onHint = {
+                            if (!quizViewModel.useHint()) {
+                                Toast.makeText(context, "Not enough coins!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onSkip = {
+                            if (!quizViewModel.skipQuestionPowerUp()) {
+                                Toast.makeText(context, "Not enough coins!", Toast.LENGTH_SHORT).show()
+                            }
+                        },
+                        onRemoveOptions = {
+                            quizViewModel.removeTwoOptionsPowerUp()
+                        }
+                    )
+                    
+                    Spacer(Modifier.height(16.dp))
 
                     val currentQuestion = questions[currentIndex]
 
@@ -213,15 +248,12 @@ fun QuizScreen(
                         selectedAnswer = selectedAnswers[currentQuestion.id],
                         answerState = answerStates[currentQuestion.id] ?: AnswerState.UNANSWERED,
                         isBookmarked = isBookmarked,
+                        isHintVisible = isHintVisible,
+                        removedOptions = removedOptions,
                         onAnswerSelected = { answer ->
                             quizViewModel.setAnswer(currentQuestion.id, answer)
                         },
                         onBookmarkToggle = {
-                            if (!isBookmarked) {
-                                Toast.makeText(context, "Added to bookmarks", Toast.LENGTH_SHORT).show()
-                            } else {
-                                Toast.makeText(context, "Removed from bookmarks", Toast.LENGTH_SHORT).show()
-                            }
                             quizViewModel.toggleBookmark(currentQuestion)
                         }
                     )
@@ -277,7 +309,7 @@ fun QuizScreen(
 
     if (showResumeDialog) {
         AlertDialog(
-            onDismissRequest = { /* Don't dismiss by tapping outside */ },
+            onDismissRequest = { },
             title = { Text("Resume Quiz?") },
             text = { Text(resumeMessage) },
             confirmButton = {
@@ -309,7 +341,7 @@ fun QuizScreen(
         AlertDialog(
             onDismissRequest = { showSubmitDialog = false },
             title = { Text("Submit Quiz?") },
-            text = { Text("Are you sure you want to submit the quiz? You have completed all questions.") },
+            text = { Text("Are you sure you want to submit the quiz?") },
             confirmButton = {
                 TextButton(onClick = {
                     showSubmitDialog = false
@@ -322,12 +354,70 @@ fun QuizScreen(
 }
 
 @Composable
+fun PowerUpsBar(
+    coins: Int,
+    onHint: () -> Unit,
+    onSkip: () -> Unit,
+    onRemoveOptions: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceEvenly
+    ) {
+        PowerUpButton(
+            icon = Icons.Default.Lightbulb,
+            label = "Hint",
+            cost = 10,
+            onClick = onHint
+        )
+        PowerUpButton(
+            icon = Icons.Default.SkipNext,
+            label = "Skip",
+            cost = 15,
+            onClick = onSkip
+        )
+        PowerUpButton(
+            icon = Icons.Default.RemoveCircleOutline,
+            label = "50:50",
+            cost = 10,
+            onClick = onRemoveOptions
+        )
+    }
+}
+
+@Composable
+fun PowerUpButton(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    cost: Int,
+    onClick: () -> Unit
+) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        IconButton(
+            onClick = onClick,
+            modifier = Modifier
+                .size(50.dp)
+                .background(MaterialTheme.colorScheme.secondaryContainer, CircleShape)
+        ) {
+            Icon(icon, contentDescription = label, tint = MaterialTheme.colorScheme.onSecondaryContainer)
+        }
+        Text(text = label, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.MonetizationOn, null, Modifier.size(10.dp), tint = Color(0xFFFFD700))
+            Text(text = cost.toString(), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+        }
+    }
+}
+
+@Composable
 fun QuestionCard(
     question: Question,
     questionNumber: Int,
     selectedAnswer: String?,
     answerState: AnswerState,
     isBookmarked: Boolean,
+    isHintVisible: Boolean,
+    removedOptions: Set<String>,
     onAnswerSelected: (String) -> Unit,
     onBookmarkToggle: () -> Unit
 ) {
@@ -351,24 +441,34 @@ fun QuestionCard(
                 }
                 Spacer(Modifier.height(16.dp))
                 Text("Q$questionNumber. ${question.questionText}", fontSize = 18.sp, fontWeight = FontWeight.SemiBold, lineHeight = 26.sp)
+                
+                // Feature 8: Show Hint
+                if (isHintVisible && question.explanation != null) {
+                    Spacer(Modifier.height(8.dp))
+                    Surface(
+                        color = Color(0xFFFFF9C4),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(Modifier.padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Lightbulb, null, Modifier.size(16.dp), tint = Color(0xFFFBC02D))
+                            Spacer(Modifier.width(8.dp))
+                            Text(text = "Hint: ${question.explanation}", fontSize = 12.sp, color = Color.Black)
+                        }
+                    }
+                }
+
                 Spacer(Modifier.height(20.dp))
 
-                if (question.questionType == QuestionType.MULTIPLE_CHOICE && question.options.isEmpty()) {
-                    Text(
-                        text = "This multiple-choice question has no options. Please contact support or an admin.",
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(vertical = 16.dp).fillMaxWidth(),
-                        textAlign = TextAlign.Center
-                    )
-                } else {
-                    val options = when (question.questionType) {
-                        QuestionType.MULTIPLE_CHOICE -> question.options
-                        QuestionType.TRUE_FALSE -> listOf("True", "False")
-                        else -> emptyList()
-                    }
+                val options = when (question.questionType) {
+                    QuestionType.MULTIPLE_CHOICE -> question.options
+                    QuestionType.TRUE_FALSE -> listOf("True", "False")
+                    else -> emptyList()
+                }
 
-                    if (question.questionType != QuestionType.SHORT_ANSWER) {
-                        options.forEachIndexed { index, option ->
+                if (question.questionType != QuestionType.SHORT_ANSWER) {
+                    options.forEachIndexed { index, option ->
+                        if (!removedOptions.contains(option)) {
                             val isCorrectOption = option.equals(question.correctAnswer, ignoreCase = true)
                             val optionLabel = ('A' + index).toString()
                             AnswerOption(
@@ -381,16 +481,16 @@ fun QuestionCard(
                             )
                             Spacer(Modifier.height(12.dp))
                         }
-                    } else {
-                        OutlinedTextField(
-                            value = selectedAnswer ?: "",
-                            onValueChange = onAnswerSelected,
-                            label = { Text("Your Answer") },
-                            modifier = Modifier.fillMaxWidth(),
-                            shape = RoundedCornerShape(12.dp),
-                            readOnly = isAnswered
-                        )
                     }
+                } else {
+                    OutlinedTextField(
+                        value = selectedAnswer ?: "",
+                        onValueChange = onAnswerSelected,
+                        label = { Text("Your Answer") },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        readOnly = isAnswered
+                    )
                 }
 
                 AnimatedVisibility(visible = isAnswered && question.explanation?.isNotBlank() == true) {

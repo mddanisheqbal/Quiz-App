@@ -1,6 +1,7 @@
 package com.example.quizapp.presentation.screens
 
 import android.Manifest
+import android.app.Activity
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
@@ -20,6 +21,7 @@ import androidx.compose.foundation.lazy.grid.GridItemSpan
 import androidx.compose.foundation.lazy.grid.LazyGridState
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -38,6 +40,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.quizapp.data.model.Category
@@ -67,12 +70,23 @@ fun HomeScreen(
     val userLevel by quizViewModel.userLevel.collectAsState()
     val streakCount by quizViewModel.streakCount.collectAsState()
     val dailyChallengeCompleted by quizViewModel.dailyChallengeCompleted.collectAsState()
+    val coins by quizViewModel.coins.collectAsState()
+    val showDailyReward by quizViewModel.showDailyRewardDialog.collectAsState()
+    val rewardAmount by quizViewModel.dailyRewardAmount.collectAsState()
     
     val drawerState = LocalDrawerState.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
     val prefsManager = remember { PreferencesManager(context) }
     val snackbarHostState = remember { SnackbarHostState() }
+
+    // Feature 5: Daily Reward Dialog
+    if (showDailyReward && rewardAmount != null) {
+        DailyRewardDialog(
+            rewardAmount = rewardAmount!!,
+            onClaim = { quizViewModel.dismissDailyRewardDialog() }
+        )
+    }
 
     // Permission Launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -98,7 +112,6 @@ fun HomeScreen(
         prefsManager.setNotificationsRequested(true)
     }
 
-    // Preserve scroll position
     val listState = rememberSaveable(saver = LazyGridState.Saver) {
         LazyGridState()
     }
@@ -106,7 +119,6 @@ fun HomeScreen(
     LaunchedEffect(Unit) {
         quizViewModel.loadCategories()
         
-        // Handle Notification Permission
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             val isPermissionGranted = ContextCompat.checkSelfPermission(
                 context,
@@ -119,7 +131,6 @@ fun HomeScreen(
                 NotificationWorker.scheduleDailyReminders(context)
             }
         } else {
-            // Automatic permission for Android 12 and below
             NotificationWorker.scheduleDailyReminders(context)
         }
     }
@@ -140,6 +151,33 @@ fun HomeScreen(
                     }
                 },
                 actions = {
+                    // Feature 10: Coins Display in TopBar
+                    Surface(
+                        modifier = Modifier
+                            .padding(end = 8.dp)
+                            .clickable { /* Open Store/Coins screen */ },
+                        shape = RoundedCornerShape(20.dp),
+                        color = Color.Black.copy(alpha = 0.2f)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.MonetizationOn,
+                                contentDescription = "Coins",
+                                tint = Color(0xFFFFD700),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = coins.toString(),
+                                color = Color.White,
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 14.sp
+                            )
+                        }
+                    }
                     IconButton(onClick = onNavigateToLeaderboard) {
                         Icon(Icons.Default.Leaderboard, contentDescription = "Leaderboard")
                     }
@@ -178,7 +216,6 @@ fun HomeScreen(
                         horizontalArrangement = Arrangement.spacedBy(16.dp),
                         verticalArrangement = Arrangement.spacedBy(16.dp)
                     ) {
-                        // SECTION 1 — LEVEL PROGRESS CARD
                         item(span = { GridItemSpan(2) }) {
                             LevelProgressCard(
                                 level = userLevel,
@@ -187,7 +224,6 @@ fun HomeScreen(
                             )
                         }
 
-                        // SECTION 2 — DAILY STREAK CARD
                         item(span = { GridItemSpan(2) }) {
                             DailyStreakCard(
                                 streak = streakCount,
@@ -195,7 +231,13 @@ fun HomeScreen(
                             )
                         }
 
-                        // Daily Challenge Card
+                        // Feature 7: Earn Free Coins Ad Banner
+                        item(span = { GridItemSpan(2) }) {
+                            EarnCoinsAdCard(
+                                onClick = { quizViewModel.showRewardedAd(context as Activity) }
+                            )
+                        }
+
                         item(span = { GridItemSpan(2) }) {
                             DailyChallengeCard(
                                 completed = dailyChallengeCompleted,
@@ -264,6 +306,106 @@ fun HomeScreen(
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun DailyRewardDialog(rewardAmount: Int, onClaim: () -> Unit) {
+    Dialog(onDismissRequest = onClaim) {
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            shape = RoundedCornerShape(24.dp),
+            elevation = CardDefaults.cardElevation(8.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth(),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "🎁 Daily Reward",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Box(
+                    modifier = Modifier
+                        .size(100.dp)
+                        .background(Color(0xFFFFD700).copy(alpha = 0.1f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MonetizationOn,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(64.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Congratulations!",
+                    style = MaterialTheme.typography.titleMedium
+                )
+                Text(
+                    text = "You earned $rewardAmount coins",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Button(
+                    onClick = onClaim,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Claim")
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun EarnCoinsAdCard(onClick: () -> Unit) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(18.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = Icons.Default.VideoLibrary,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.tertiary,
+                modifier = Modifier.size(32.dp)
+            )
+            Spacer(modifier = Modifier.width(16.dp))
+            Column {
+                Text(
+                    text = "Earn Free Coins",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Watch a quick ad to get 20-50 coins!",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Icon(
+                imageVector = Icons.Default.ArrowForwardIos,
+                contentDescription = null,
+                modifier = Modifier.size(16.dp)
+            )
         }
     }
 }

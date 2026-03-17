@@ -1,7 +1,9 @@
 package com.example.quizapp.presentation.screens
 
+import android.app.Activity
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -17,6 +19,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -41,6 +44,7 @@ fun ResultScreen(
     val quizResult by quizViewModel.quizResult.collectAsState()
     val xpAwarded by quizViewModel.xpAwardedInThisSession.collectAsState()
     val isPreviouslyCompleted by quizViewModel.isPreviouslyCompleted.collectAsState()
+    val context = LocalContext.current
 
     // Animation
     val scale = remember { Animatable(0f) }
@@ -75,7 +79,6 @@ fun ResultScreen(
             is Resource.Success -> {
                 val result = (quizResult as Resource.Success).data!!
                 
-                // Filter only wrong answers for review (Incorrect and not empty)
                 val wrongAnswersForReview = result.answers.filter { (_, answer) ->
                     !answer.isCorrect && answer.userAnswer.isNotEmpty()
                 }.toList()
@@ -87,7 +90,6 @@ fun ResultScreen(
                     contentPadding = PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
-                    // Score Card
                     item {
                         Card(
                             modifier = Modifier
@@ -177,7 +179,40 @@ fun ResultScreen(
                         }
                     }
 
-                    // Statistics Card
+                    // Feature 7: Watch Ad to earn extra coins
+                    item {
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { quizViewModel.showRewardedAd(context as Activity) },
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(16.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.VideoLibrary,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.tertiary
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column {
+                                    Text(
+                                        text = "Watch Ad → Earn 20-50 Coins",
+                                        fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium
+                                    )
+                                    Text(
+                                        text = "Get extra coins for hints and skips!",
+                                        style = MaterialTheme.typography.bodySmall
+                                    )
+                                }
+                            }
+                        }
+                    }
+
                     item {
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -262,7 +297,6 @@ fun ResultScreen(
                         }
                     }
 
-                    // Review Answers Section (Only Wrong Answers)
                     if (wrongAnswersForReview.isNotEmpty()) {
                         item {
                             Text(
@@ -281,7 +315,6 @@ fun ResultScreen(
                         }
                     }
 
-                    // Action Buttons
                     item {
                         Column(
                             modifier = Modifier.fillMaxWidth(),

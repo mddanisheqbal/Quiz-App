@@ -5,6 +5,7 @@ import android.util.Log
 import com.example.quizapp.di.DatabaseSeeder
 import com.example.quizapp.util.UserActivityManager
 import com.example.quizapp.worker.EngagementReminderWorker
+import com.google.android.gms.ads.MobileAds
 import dagger.hilt.android.HiltAndroidApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,6 +23,9 @@ class QuizApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        
+        // Initialize Mobile Ads SDK
+        MobileAds.initialize(this) {}
         
         // Schedule smart engagement reminders
         EngagementReminderWorker.scheduleReminders(this)
