@@ -18,6 +18,8 @@ sealed class Screen(val route: String) {
     object LevelProgress : Screen("level_progress")
     object StreakDetails : Screen("streak_details")
     object Leaderboard : Screen("leaderboard")
+    object DailyChallenge : Screen("daily_challenge")
+    object Achievements : Screen("achievements")
     object AdminLogin : Screen("admin_login")
     object AdminDashboard : Screen("admin_dashboard")
     object ManageCategories : Screen("manage_categories")

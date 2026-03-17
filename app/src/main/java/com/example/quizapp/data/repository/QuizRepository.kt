@@ -1,9 +1,12 @@
 package com.example.quizapp.data.repository
 
+import com.example.quizapp.data.local.QuizSessionDao
+import com.example.quizapp.data.local.QuizSessionEntity
 import com.example.quizapp.data.model.*
 import com.example.quizapp.util.Resource
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
+import com.google.firebase.firestore.SetOptions
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -13,7 +16,8 @@ import javax.inject.Singleton
 
 @Singleton
 class QuizRepository @Inject constructor(
-    private val firestore: FirebaseFirestore
+    private val firestore: FirebaseFirestore,
+    private val quizSessionDao: QuizSessionDao
 ) {
 
     private val categoriesCollection = firestore.collection("categories")
@@ -21,6 +25,7 @@ class QuizRepository @Inject constructor(
     private val questionsCollection = firestore.collection("questions")
     private val resultsCollection = firestore.collection("results")
     private val usersCollection = firestore.collection("users")
+    private val leaderboardCollection = firestore.collection("leaderboard")
 
     /**
      * Real-time categories stream
@@ -123,21 +128,41 @@ class QuizRepository @Inject constructor(
         awaitClose { subscription.remove() }
     }
 
+    suspend fun getUserProfile(userId: String): Resource<User> {
+        return try {
+            val doc = usersCollection.document(userId).get().await()
+            if (doc.exists()) {
+                Resource.Success(doc.toObject(User::class.java)!!)
+            } else {
+                Resource.Error("User profile not found")
+            }
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to fetch user profile")
+        }
+    }
+
     /**
      * Fetch top users for leaderboard
      */
     fun getLeaderboardFlow(): Flow<Resource<List<User>>> = callbackFlow {
         trySend(Resource.Loading())
-        val subscription = usersCollection
+        val subscription = leaderboardCollection
             .orderBy("totalXP", Query.Direction.DESCENDING)
-            .limit(20)
+            .limit(50)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(Resource.Error(error.message ?: "Stream error"))
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val users = snapshot.toObjects(User::class.java)
+                    val users = snapshot.documents.mapNotNull { doc ->
+                        User(
+                            uid = doc.getString("uid") ?: "",
+                            username = doc.getString("username") ?: "",
+                            totalXP = doc.getLong("totalXP")?.toInt() ?: 0,
+                            streak = doc.getLong("streak")?.toInt() ?: 0
+                        )
+                    }
                     trySend(Resource.Success(users))
                 }
             }
@@ -172,6 +197,237 @@ class QuizRepository @Inject constructor(
         }
     }
 
+    suspend fun updateLeaderboard(userId: String, username: String, totalXP: Int, level: Int, streak: Int): Resource<Unit> {
+        return try {
+            val data = mapOf(
+                "uid" to userId,
+                "username" to username,
+                "totalXP" to totalXP,
+                "level" to level,
+                "streak" to streak
+            )
+            leaderboardCollection.document(userId).set(data, SetOptions.merge()).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to update leaderboard")
+        }
+    }
+
+    suspend fun getTopicProgress(userId: String): Resource<Map<String, Boolean>> {
+        return try {
+            val snapshot = usersCollection.document(userId).collection("progress").get().await()
+            val progressMap = snapshot.documents.associate { doc ->
+                doc.id to (doc.getBoolean("completed") ?: false)
+            }
+            Resource.Success(progressMap)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to fetch topic progress")
+        }
+    }
+
+    // FEATURE 2 — SAVE STARS IN FIRESTORE (New Method)
+    suspend fun updateTopicProgressWithStars(
+        userId: String,
+        topicId: String,
+        score: Int,
+        stars: Int,
+        totalQuestions: Int,
+        percentage: Int
+    ): Resource<Unit> {
+        return try {
+            val progressRef = usersCollection.document(userId).collection("progress").document(topicId)
+            val doc = progressRef.get().await()
+            
+            val oldStars = doc.getLong("stars")?.toInt() ?: 0
+            
+            val data = mutableMapOf<String, Any>(
+                "topicId" to topicId,
+                "completed" to true,
+                "score" to score,
+                "totalQuestions" to totalQuestions,
+                "percentage" to percentage,
+                "completedAt" to System.currentTimeMillis()
+            )
+            
+            // Only update stars if newStars > oldStars
+            if (stars > oldStars) {
+                data["stars"] = stars
+            }
+
+            progressRef.set(data, SetOptions.merge()).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to update topic progress")
+        }
+    }
+
+    // New method to get progress with stars
+    suspend fun getTopicProgressWithStars(userId: String): Resource<Map<String, Int>> {
+        return try {
+            val snapshot = usersCollection.document(userId).collection("progress").get().await()
+            val progressMap = snapshot.documents.associate { doc ->
+                doc.id to (doc.getLong("stars")?.toInt() ?: 0)
+            }
+            Resource.Success(progressMap)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to fetch topic progress with stars")
+        }
+    }
+
+    suspend fun updateTopicProgress(userId: String, topicId: String, score: Int): Resource<Unit> {
+        return try {
+            val data = mapOf(
+                "topicId" to topicId,
+                "completed" to true,
+                "score" to score,
+                "completedAt" to System.currentTimeMillis()
+            )
+            usersCollection.document(userId).collection("progress").document(topicId).set(data, SetOptions.merge()).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to update topic progress")
+        }
+    }
+
+    suspend fun initializeTopicProgress(userId: String, topicId: String): Resource<Unit> {
+        return try {
+            val data = mapOf(
+                "topicId" to topicId,
+                "completed" to false,
+                "score" to 0,
+                "stars" to 0,
+                "completedAt" to 0L
+            )
+            usersCollection.document(userId).collection("progress").document(topicId).set(data, SetOptions.merge()).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to initialize topic progress")
+        }
+    }
+
+    suspend fun isQuizCompleted(userId: String, quizId: String): Boolean {
+        return try {
+            val doc = usersCollection.document(userId).collection("completedQuizzes").document(quizId).get().await()
+            doc.exists()
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun markQuizAsCompleted(userId: String, quizId: String, xpAwarded: Int): Resource<Unit> {
+        return try {
+            val data = mapOf(
+                "quizId" to quizId,
+                "xpAwarded" to xpAwarded,
+                "completedAt" to System.currentTimeMillis()
+            )
+            usersCollection.document(userId).collection("completedQuizzes").document(quizId).set(data).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to mark quiz as completed")
+        }
+    }
+
+    // ========== SESSION MANAGEMENT ==========
+
+    suspend fun saveLocalQuizSession(session: QuizSessionEntity) {
+        quizSessionDao.saveSession(session)
+    }
+
+    suspend fun getLocalQuizSession(chapterId: String): QuizSessionEntity? {
+        return quizSessionDao.getSession(chapterId)
+    }
+
+    suspend fun deleteLocalQuizSession(chapterId: String) {
+        quizSessionDao.deleteSession(chapterId)
+    }
+
+    suspend fun saveQuizSession(
+        userId: String,
+        chapterId: String,
+        categoryId: String,
+        currentIndex: Int,
+        answers: Map<String, String>,
+        questionOrder: List<String>,
+        totalQuestions: Int,
+        startedAt: Long
+    ): Resource<Unit> {
+        // Save locally first
+        saveLocalQuizSession(
+            QuizSessionEntity(
+                chapterId = chapterId,
+                categoryId = categoryId,
+                questionOrder = questionOrder,
+                answers = answers,
+                currentIndex = currentIndex,
+                totalQuestions = totalQuestions,
+                startedAt = startedAt
+            )
+        )
+
+        // Then sync to Firestore (Backup only)
+        return try {
+            val data = mapOf(
+                "chapterId" to chapterId,
+                "categoryId" to categoryId,
+                "questionOrder" to questionOrder,
+                "currentIndex" to currentIndex,
+                "answers" to answers,
+                "totalQuestions" to totalQuestions,
+                "startedAt" to startedAt,
+                "lastUpdated" to System.currentTimeMillis()
+            )
+            usersCollection.document(userId).collection("quizSessions").document(chapterId).set(data).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            // Firestore sync fail is okay because we have local storage
+            Resource.Error(e.message ?: "Failed to sync quiz session to cloud")
+        }
+    }
+
+    suspend fun getQuizSession(userId: String, chapterId: String): Resource<QuizSessionEntity?> {
+        // Try local first (Source of Truth)
+        val localSession = getLocalQuizSession(chapterId)
+        if (localSession != null) {
+            return Resource.Success(localSession)
+        }
+
+        // Then Firestore as backup
+        return try {
+            val doc = usersCollection.document(userId).collection("quizSessions").document(chapterId).get().await()
+            if (doc.exists()) {
+                val data = doc.data
+                if (data != null) {
+                    val session = QuizSessionEntity(
+                        chapterId = data["chapterId"] as? String ?: "",
+                        categoryId = data["categoryId"] as? String ?: "",
+                        questionOrder = data["questionOrder"] as? List<String> ?: emptyList(),
+                        answers = data["answers"] as? Map<String, String> ?: emptyMap(),
+                        currentIndex = (data["currentIndex"] as? Long)?.toInt() ?: 0,
+                        totalQuestions = (data["totalQuestions"] as? Long)?.toInt() ?: 0,
+                        startedAt = (data["startedAt"] as? Long) ?: System.currentTimeMillis()
+                    )
+                    // Restore to local if found on cloud
+                    saveLocalQuizSession(session)
+                    return Resource.Success(session)
+                }
+            }
+            Resource.Success(null)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to fetch quiz session")
+        }
+    }
+
+    suspend fun deleteQuizSession(userId: String, chapterId: String): Resource<Unit> {
+        deleteLocalQuizSession(chapterId)
+        return try {
+            usersCollection.document(userId).collection("quizSessions").document(chapterId).delete().await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to delete quiz session")
+        }
+    }
+
     suspend fun getQuizHistory(userId: String): Resource<List<QuizResult>> {
         return try {
             val snapshot = resultsCollection
@@ -183,5 +439,24 @@ class QuizRepository @Inject constructor(
         } catch (e: Exception) {
             Resource.Error("Failed to fetch history")
         }
+    }
+
+    /**
+     * Real-time achievements stream
+     */
+    fun getAchievementsFlow(userId: String): Flow<Resource<List<Achievement>>> = callbackFlow {
+        trySend(Resource.Loading())
+        val subscription = usersCollection.document(userId).collection("achievements")
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(Resource.Error(error.message ?: "Stream error"))
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val achievements = snapshot.toObjects(Achievement::class.java)
+                    trySend(Resource.Success(achievements))
+                }
+            }
+        awaitClose { subscription.remove() }
     }
 }

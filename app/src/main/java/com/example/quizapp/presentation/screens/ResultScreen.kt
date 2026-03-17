@@ -18,6 +18,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -38,6 +39,8 @@ fun ResultScreen(
     quizViewModel: QuizViewModel = hiltViewModel()
 ) {
     val quizResult by quizViewModel.quizResult.collectAsState()
+    val xpAwarded by quizViewModel.xpAwardedInThisSession.collectAsState()
+    val isPreviouslyCompleted by quizViewModel.isPreviouslyCompleted.collectAsState()
 
     // Animation
     val scale = remember { Animatable(0f) }
@@ -130,7 +133,30 @@ fun ResultScreen(
                                         color = Color.White
                                     )
 
-                                    Spacer(modifier = Modifier.height(8.dp))
+                                    if (xpAwarded != null && xpAwarded!! > 0) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Surface(
+                                            color = Color.White.copy(alpha = 0.2f),
+                                            shape = RoundedCornerShape(16.dp)
+                                        ) {
+                                            Text(
+                                                text = "🎉 +$xpAwarded XP Earned!",
+                                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                                                color = Color.White,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
+                                    } else if (isPreviouslyCompleted) {
+                                        Spacer(modifier = Modifier.height(8.dp))
+                                        Text(
+                                            text = "You already completed this quiz. XP was already awarded.",
+                                            color = Color.White.copy(alpha = 0.8f),
+                                            fontSize = 12.sp,
+                                            textAlign = TextAlign.Center
+                                        )
+                                    }
+
+                                    Spacer(modifier = Modifier.height(16.dp))
 
                                     Text(
                                         text = "${result.percentage.toInt()}%",

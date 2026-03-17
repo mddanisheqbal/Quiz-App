@@ -45,12 +45,18 @@ fun QuizScreen(
     quizViewModel: QuizViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
-    val questionsState by quizViewModel.questions.collectAsStateWithLifecycle()
+    val questions by quizViewModel.questions.collectAsStateWithLifecycle()
+    val isLoading by quizViewModel.isLoading.collectAsStateWithLifecycle()
+    val error by quizViewModel.error.collectAsStateWithLifecycle()
+    
     val currentIndex by quizViewModel.currentQuestionIndex.collectAsStateWithLifecycle()
-    val userAnswers by quizViewModel.userAnswers.collectAsStateWithLifecycle()
+    val selectedAnswers by quizViewModel.selectedAnswers.collectAsStateWithLifecycle()
     val answerStates by quizViewModel.answerState.collectAsStateWithLifecycle()
     val timeRemaining by quizViewModel.timeRemaining.collectAsStateWithLifecycle()
     val quizResult by quizViewModel.quizResult.collectAsStateWithLifecycle()
+    val isBookmarked by quizViewModel.isBookmarked.collectAsStateWithLifecycle()
+    val showResumeDialog by quizViewModel.showResumeDialog.collectAsStateWithLifecycle()
+    val resumeMessage by quizViewModel.resumeMessage.collectAsStateWithLifecycle()
 
     var showExitDialog by remember { mutableStateOf(false) }
     var showSubmitDialog by remember { mutableStateOf(false) }
@@ -102,10 +108,9 @@ fun QuizScreen(
                 title = {
                     Column {
                         Text(text = topicName, fontWeight = FontWeight.Bold)
-                        if (questionsState is Resource.Success) {
-                            val questionList = (questionsState as Resource.Success).data ?: emptyList()
+                        if (questions.isNotEmpty()) {
                             Text(
-                                text = "Question ${currentIndex + 1}/${questionList.size}",
+                                text = "Question ${currentIndex + 1}/${questions.size}",
                                 fontSize = 12.sp,
                                 color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f)
                             )
@@ -118,8 +123,21 @@ fun QuizScreen(
                     }
                 },
                 actions = {
-                    TextButton(onClick = { showSubmitDialog = true }) {
-                        Text("Submit Quiz", color = MaterialTheme.colorScheme.onPrimary)
+                    // FEATURE 2 — DISABLE SUBMIT BUTTON EARLY
+                    val isAllAnswered = selectedAnswers.size == questions.size
+                    if (questions.isNotEmpty() && currentIndex == questions.size - 1) {
+                        if (isAllAnswered) {
+                            TextButton(onClick = { showSubmitDialog = true }) {
+                                Text("Submit Quiz", color = MaterialTheme.colorScheme.onPrimary)
+                            }
+                        } else {
+                            Text(
+                                "Finish all to submit",
+                                fontSize = 12.sp,
+                                modifier = Modifier.padding(end = 16.dp),
+                                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.7f)
+                            )
+                        }
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -131,116 +149,151 @@ fun QuizScreen(
         }
     ) { paddingValues ->
         Box(modifier = Modifier.fillMaxSize().padding(paddingValues)) {
-            when (questionsState) {
-                is Resource.Loading -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator()
+            if (isLoading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else if (error != null) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
+                        Icon(Icons.Default.Error, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
+                        Spacer(Modifier.height(16.dp))
+                        Text(
+                            text = error ?: "An error occurred",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error,
+                            textAlign = TextAlign.Center
+                        )
                     }
                 }
-                is Resource.Success -> {
-                    val questionList = (questionsState as Resource.Success).data ?: emptyList()
-                    if (questionList.isEmpty()) {
-                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                            Text("No questions available for this category.")
-                        }
-                    } else {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .verticalScroll(rememberScrollState())
-                                .padding(16.dp)
-                        ) {
-                            LinearProgressIndicator(
-                                progress = (currentIndex + 1).toFloat() / (if (questionList.isEmpty()) 1 else questionList.size),
-                                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
-                            )
-                            Spacer(Modifier.height(24.dp))
+            } else if (questions.isEmpty()) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Text("No questions available for this category.")
+                }
+            } else {
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(16.dp)
+                ) {
+                    // FEATURE 7 — UX IMPROVEMENT (Progress display)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Answered ${selectedAnswers.size} / ${questions.size} questions",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Medium
+                        )
+                        val timeColor = if (timeRemaining < 10) Color.Red else MaterialTheme.colorScheme.primary
+                        Text(
+                            text = "00:${timeRemaining.toString().padStart(2, '0')}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = timeColor
+                        )
+                    }
+                    
+                    Spacer(Modifier.height(8.dp))
+                    
+                    LinearProgressIndicator(
+                        progress = (currentIndex + 1).toFloat() / questions.size,
+                        modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
+                    )
+                    Spacer(Modifier.height(24.dp))
 
-                            val currentQuestion = questionList[currentIndex]
-                            val isBookmarked by quizViewModel.isQuestionBookmarked(currentQuestion.id).collectAsState(initial = false)
+                    val currentQuestion = questions[currentIndex]
 
-                            QuestionCard(
-                                question = currentQuestion,
-                                questionNumber = currentIndex + 1,
-                                selectedAnswer = userAnswers[currentIndex],
-                                answerState = answerStates[currentIndex] ?: AnswerState.UNANSWERED,
-                                isBookmarked = isBookmarked,
-                                onAnswerSelected = { answer ->
-                                    quizViewModel.setAnswer(currentIndex, answer)
-                                },
-                                onBookmarkToggle = {
-                                    if (!isBookmarked) {
-                                        Toast.makeText(context, "Added to bookmarks", Toast.LENGTH_SHORT).show()
-                                    }
-                                    quizViewModel.toggleBookmark(currentQuestion)
-                                }
-                            )
-
-                            Spacer(Modifier.height(24.dp))
-
-                            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                OutlinedButton(
-                                    onClick = { quizViewModel.previousQuestion() },
-                                    enabled = currentIndex > 0,
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(Icons.Default.ArrowBack, null, Modifier.size(20.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Previous")
-                                }
-                                Spacer(Modifier.width(16.dp))
-                                Button(
-                                    onClick = {
-                                        if (currentIndex < questionList.size - 1) {
-                                            quizViewModel.nextQuestion()
-                                        } else {
-                                            showSubmitDialog = true
-                                        }
-                                    },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Text(if (currentIndex < questionList.size - 1) "Next" else "Submit")
-                                    Spacer(Modifier.width(8.dp))
-                                    Icon(
-                                        if (currentIndex < questionList.size - 1) Icons.Default.ArrowForward else Icons.Default.Check,
-                                        null,
-                                        Modifier.size(20.dp)
-                                    )
-                                }
+                    QuestionCard(
+                        question = currentQuestion,
+                        questionNumber = currentIndex + 1,
+                        selectedAnswer = selectedAnswers[currentQuestion.id],
+                        answerState = answerStates[currentQuestion.id] ?: AnswerState.UNANSWERED,
+                        isBookmarked = isBookmarked,
+                        onAnswerSelected = { answer ->
+                            quizViewModel.setAnswer(currentQuestion.id, answer)
+                        },
+                        onBookmarkToggle = {
+                            if (!isBookmarked) {
+                                Toast.makeText(context, "Added to bookmarks", Toast.LENGTH_SHORT).show()
+                            } else {
+                                Toast.makeText(context, "Removed from bookmarks", Toast.LENGTH_SHORT).show()
                             }
-                            Spacer(Modifier.height(16.dp))
-                            QuestionNavigator(
-                                totalQuestions = questionList.size,
-                                currentIndex = currentIndex,
-                                answeredQuestions = userAnswers.keys,
-                                onQuestionClick = { index -> quizViewModel.goToQuestion(index) }
+                            quizViewModel.toggleBookmark(currentQuestion)
+                        }
+                    )
+
+                    Spacer(Modifier.height(24.dp))
+
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                        OutlinedButton(
+                            onClick = { quizViewModel.previousQuestion() },
+                            enabled = currentIndex > 0,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.ArrowBack, null, Modifier.size(20.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text("Previous")
+                        }
+                        Spacer(Modifier.width(16.dp))
+                        
+                        val isLastQuestion = currentIndex == questions.size - 1
+                        val isAllAnswered = selectedAnswers.size == questions.size
+                        
+                        Button(
+                            onClick = {
+                                if (!isLastQuestion) {
+                                    quizViewModel.nextQuestion()
+                                } else if (isAllAnswered) {
+                                    showSubmitDialog = true
+                                }
+                            },
+                            enabled = !isLastQuestion || isAllAnswered,
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text(if (isLastQuestion) "Submit" else "Next")
+                            Spacer(Modifier.width(8.dp))
+                            Icon(
+                                if (isLastQuestion) Icons.Default.Check else Icons.Default.ArrowForward,
+                                null,
+                                Modifier.size(20.dp)
                             )
                         }
                     }
-                }
-                is Resource.Error -> {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.padding(24.dp)) {
-                            Icon(Icons.Default.Error, null, Modifier.size(64.dp), tint = MaterialTheme.colorScheme.error)
-                            Spacer(Modifier.height(16.dp))
-                            Text(
-                                text = (questionsState as Resource.Error).message ?: "An error occurred",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.error,
-                                textAlign = TextAlign.Center
-                            )
-                        }
-                    }
+                    Spacer(Modifier.height(16.dp))
+                    QuestionNavigator(
+                        questions = questions,
+                        currentIndex = currentIndex,
+                        answeredQuestionIds = selectedAnswers.keys,
+                        onQuestionClick = { index -> quizViewModel.goToQuestion(index) }
+                    )
                 }
             }
         }
+    }
+
+    if (showResumeDialog) {
+        AlertDialog(
+            onDismissRequest = { /* Don't dismiss by tapping outside */ },
+            title = { Text("Resume Quiz?") },
+            text = { Text(resumeMessage) },
+            confirmButton = {
+                Button(onClick = { quizViewModel.resumeQuiz() }) { Text("Resume") }
+            },
+            dismissButton = {
+                OutlinedButton(onClick = { quizViewModel.restartQuiz() }) { Text("Restart") }
+            }
+        )
     }
 
     if (showExitDialog) {
         AlertDialog(
             onDismissRequest = { showExitDialog = false },
             title = { Text("Exit Quiz?") },
-            text = { Text("Your progress will be lost. Are you sure you want to exit?") },
+            text = { Text("Your progress will be saved automatically. You can resume later.") },
             confirmButton = {
                 TextButton(onClick = {
                     showExitDialog = false
@@ -256,7 +309,7 @@ fun QuizScreen(
         AlertDialog(
             onDismissRequest = { showSubmitDialog = false },
             title = { Text("Submit Quiz?") },
-            text = { Text("Are you sure you want to submit the quiz?") },
+            text = { Text("Are you sure you want to submit the quiz? You have completed all questions.") },
             confirmButton = {
                 TextButton(onClick = {
                     showSubmitDialog = false
@@ -488,17 +541,17 @@ fun ExplanationBox(answerState: AnswerState, explanation: String) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuestionNavigator(
-    totalQuestions: Int,
+    questions: List<Question>,
     currentIndex: Int,
-    answeredQuestions: Set<Int>,
+    answeredQuestionIds: Set<String>,
     onQuestionClick: (Int) -> Unit
 ) {
     Row(
         modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        repeat(totalQuestions) { index ->
-            val isAnswered = answeredQuestions.contains(index)
+        questions.forEachIndexed { index, question ->
+            val isAnswered = answeredQuestionIds.contains(question.id)
             val isSelected = index == currentIndex
 
             val color = when {

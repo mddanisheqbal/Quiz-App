@@ -92,6 +92,7 @@ fun NavGraph(
                         onNavigateToLevelProgress = { navController.navigate(Screen.LevelProgress.route) },
                         onNavigateToStreakDetails = { navController.navigate(Screen.StreakDetails.route) },
                         onNavigateToLeaderboard = { navController.navigate(Screen.Leaderboard.route) },
+                        onNavigateToDailyChallenge = { navController.navigate(Screen.DailyChallenge.route) },
                         onLogout = {
                             navController.navigate(Screen.Login.route) {
                                 popUpTo("main_flow") { inclusive = true }
@@ -192,6 +193,16 @@ fun NavGraph(
 
             composable(Screen.Leaderboard.route) {
                 LeaderboardScreen(onNavigateBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.DailyChallenge.route) {
+                DailyChallengeScreen(onNavigateBack = { navController.popBackStack() })
+            }
+
+            composable(Screen.Achievements.route) {
+                MainDrawerScreen(navController = navController) {
+                    AchievementsScreen(onNavigateBack = { navController.popBackStack() })
+                }
             }
         }
 

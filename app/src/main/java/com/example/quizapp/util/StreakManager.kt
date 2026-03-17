@@ -23,7 +23,7 @@ class StreakManager @Inject constructor(
             val user = snapshot.toObject(User::class.java) ?: return 0
 
             val lastActiveDate = user.lastActiveDate
-            val currentStreak = user.streakCount
+            val currentStreak = user.streak
             val currentTime = System.currentTimeMillis()
 
             val calendar = Calendar.getInstance()
@@ -49,7 +49,7 @@ class StreakManager @Inject constructor(
             if (newStreak != currentStreak || (lastActiveYear != thisYear || lastActiveDay != today)) {
                 userRef.update(
                     mapOf(
-                        "streakCount" to newStreak,
+                        "streak" to newStreak,
                         "lastActiveDate" to currentTime
                     )
                 ).await()

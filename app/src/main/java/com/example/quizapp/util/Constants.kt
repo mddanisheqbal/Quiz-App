@@ -11,6 +11,9 @@ object Constants {
     const val KEY_CURRENT_STREAK = "current_streak"
     const val KEY_LAST_QUIZ_DATE = "last_quiz_date"
     const val KEY_TOTAL_XP = "total_xp"
+    const val KEY_QUIZ_COUNT = "quiz_count"
+    const val KEY_CORRECT_ANSWERS = "correct_answers"
+    const val KEY_NOTIFICATIONS_REQUESTED = "notifications_requested"
 
     // Admin Credentials (Change these!)
     const val ADMIN_EMAIL = "mddanisheqbal7667@gmail.com"

@@ -46,6 +46,7 @@ fun MainDrawerScreen(
 
     val menuItems = listOf(
         DrawerMenuItem("Home", Screen.Home.route, Icons.Default.Home),
+        DrawerMenuItem("Achievements", Screen.Achievements.route, Icons.Default.EmojiEvents),
         DrawerMenuItem("Bookmark", Screen.Bookmark.route, Icons.Default.Bookmark),
         DrawerMenuItem("About Us", Screen.AboutUs.route, Icons.Default.Info),
         DrawerMenuItem("Share", "share_action", Icons.Default.Share),
@@ -129,7 +130,8 @@ fun MainDrawerScreen(
         },
         gesturesEnabled = currentRoute == Screen.Home.route || 
                          currentRoute == Screen.Bookmark.route || 
-                         currentRoute == Screen.AboutUs.route
+                         currentRoute == Screen.AboutUs.route ||
+                         currentRoute == Screen.Achievements.route
     ) {
         CompositionLocalProvider(LocalDrawerState provides drawerState) {
             content()

@@ -1,5 +1,13 @@
 package com.example.quizapp.presentation.screens
 
+import android.Manifest
+import android.content.Intent
+import android.content.pm.PackageManager
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.background
@@ -26,14 +34,18 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.quizapp.data.model.Category
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
 import com.example.quizapp.ui.theme.*
 import com.example.quizapp.util.Constants
+import com.example.quizapp.util.NotificationWorker
+import com.example.quizapp.util.PreferencesManager
 import com.example.quizapp.util.Resource
 import kotlinx.coroutines.launch
 
@@ -46,6 +58,7 @@ fun HomeScreen(
     onNavigateToLevelProgress: () -> Unit,
     onNavigateToStreakDetails: () -> Unit,
     onNavigateToLeaderboard: () -> Unit,
+    onNavigateToDailyChallenge: () -> Unit,
     onLogout: () -> Unit,
     quizViewModel: QuizViewModel = hiltViewModel()
 ) {
@@ -57,6 +70,33 @@ fun HomeScreen(
     
     val drawerState = LocalDrawerState.current
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
+    val prefsManager = remember { PreferencesManager(context) }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    // Permission Launcher
+    val permissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        if (isGranted) {
+            NotificationWorker.scheduleDailyReminders(context)
+        } else {
+            scope.launch {
+                val result = snackbarHostState.showSnackbar(
+                    message = "Enable notifications to stay updated with daily challenges!",
+                    actionLabel = "Settings",
+                    duration = SnackbarDuration.Long
+                )
+                if (result == SnackbarResult.ActionPerformed) {
+                    val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                        data = Uri.fromParts("package", context.packageName, null)
+                    }
+                    context.startActivity(intent)
+                }
+            }
+        }
+        prefsManager.setNotificationsRequested(true)
+    }
 
     // Preserve scroll position
     val listState = rememberSaveable(saver = LazyGridState.Saver) {
@@ -65,9 +105,27 @@ fun HomeScreen(
 
     LaunchedEffect(Unit) {
         quizViewModel.loadCategories()
+        
+        // Handle Notification Permission
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val isPermissionGranted = ContextCompat.checkSelfPermission(
+                context,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+
+            if (!isPermissionGranted && !prefsManager.isNotificationsRequested()) {
+                permissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            } else if (isPermissionGranted) {
+                NotificationWorker.scheduleDailyReminders(context)
+            }
+        } else {
+            // Automatic permission for Android 12 and below
+            NotificationWorker.scheduleDailyReminders(context)
+        }
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
             TopAppBar(
                 title = {
@@ -137,18 +195,11 @@ fun HomeScreen(
                             )
                         }
 
-                        // SECTION 3 — LEADERBOARD CARD
-                        item(span = { GridItemSpan(2) }) {
-                            LeaderboardCard(
-                                onClick = onNavigateToLeaderboard
-                            )
-                        }
-
                         // Daily Challenge Card
                         item(span = { GridItemSpan(2) }) {
                             DailyChallengeCard(
                                 completed = dailyChallengeCompleted,
-                                onClick = { quizViewModel.startDailyChallenge() }
+                                onClick = onNavigateToDailyChallenge
                             )
                         }
 
@@ -222,11 +273,24 @@ fun LevelProgressCard(level: Int, currentXP: Int, onClick: () -> Unit) {
     val thresholds = Constants.LEVEL_THRESHOLDS
     val currentLevelXP = thresholds.getOrElse(level - 1) { 0 }
     val nextLevelXP = thresholds.getOrElse(level) { thresholds.last() }
-    val remainingXP = nextLevelXP - currentXP
     
     val progress = if (nextLevelXP > currentLevelXP) {
         (currentXP - currentLevelXP).toFloat() / (nextLevelXP - currentLevelXP).toFloat()
     } else 1f
+
+    val skillTitle = when (level) {
+        1 -> "Beginner"
+        2 -> "Learner"
+        3 -> "Explorer"
+        4 -> "Coder"
+        5 -> "Developer"
+        6 -> "Advanced Developer"
+        7 -> "Expert"
+        8 -> "Senior Expert"
+        9 -> "Master"
+        10 -> "Grand Master"
+        else -> "Legend"
+    }
 
     Card(
         modifier = Modifier
@@ -251,7 +315,7 @@ fun LevelProgressCard(level: Int, currentXP: Int, onClick: () -> Unit) {
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = "Level $level Programmer",
+                        text = skillTitle,
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -280,11 +344,6 @@ fun LevelProgressCard(level: Int, currentXP: Int, onClick: () -> Unit) {
                     text = "$currentXP / $nextLevelXP XP",
                     style = MaterialTheme.typography.bodySmall,
                     fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "$remainingXP XP to next level",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
         }
@@ -343,53 +402,11 @@ fun DailyStreakCard(streak: Int, onClick: () -> Unit) {
 }
 
 @Composable
-fun LeaderboardCard(onClick: () -> Unit) {
-    Card(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick),
-        shape = RoundedCornerShape(18.dp),
-        elevation = CardDefaults.cardElevation(6.dp)
-    ) {
-        Row(
-            modifier = Modifier.padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = Icons.Default.EmojiEvents,
-                contentDescription = null,
-                tint = Color(0xFFFFD700),
-                modifier = Modifier.size(40.dp)
-            )
-            Spacer(modifier = Modifier.width(16.dp))
-            Column {
-                Text(
-                    text = "Leaderboard",
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "See top learners",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Spacer(modifier = Modifier.weight(1f))
-            Icon(
-                Icons.Default.ChevronRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
-        }
-    }
-}
-
-@Composable
 fun DailyChallengeCard(completed: Boolean, onClick: () -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(enabled = !completed, onClick = onClick),
+            .clickable(onClick = onClick),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(
             containerColor = if (completed) MaterialTheme.colorScheme.surfaceVariant 
@@ -415,7 +432,7 @@ fun DailyChallengeCard(completed: Boolean, onClick: () -> Unit) {
                     fontWeight = FontWeight.Bold
                 )
                 Text(
-                    text = if (completed) "Come back tomorrow for more!" else "Complete today's challenge (+25 XP)",
+                    text = if (completed) "See all challenges!" else "Complete today's challenge (+25 XP)",
                     style = MaterialTheme.typography.bodySmall
                 )
             }

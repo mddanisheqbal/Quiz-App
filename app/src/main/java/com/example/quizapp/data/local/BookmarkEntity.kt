@@ -9,7 +9,8 @@ data class BookmarkEntity(
     val questionText: String,
     val options: List<String>,
     val correctAnswer: String,
+    val explanation: String,
     val topicName: String,
-    val categoryName: String,
+    val categoryName: String = "",
     val timestamp: Long = System.currentTimeMillis()
 )

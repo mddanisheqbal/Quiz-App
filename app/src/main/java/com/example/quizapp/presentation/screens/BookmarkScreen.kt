@@ -137,6 +137,15 @@ fun BookmarkItem(
                 lineHeight = 22.sp
             )
             
+            if (bookmark.explanation.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = "Explanation: ${bookmark.explanation}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
             Spacer(modifier = Modifier.height(12.dp))
             
             bookmark.options.forEach { option ->

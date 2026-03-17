@@ -43,7 +43,7 @@ class AuthRepository @Inject constructor(
             val user = User(
                 uid = firebaseUser.uid,
                 email = email,
-                displayName = displayName,
+                username = displayName,
                 createdAt = System.currentTimeMillis()
             )
 
@@ -52,7 +52,7 @@ class AuthRepository @Inject constructor(
                 .set(user)
                 .await()
 
-            saveUserToPrefs(firebaseUser.uid, email, displayName, false)
+            saveUserToPrefs(user)
 
             Resource.Success(user)
 
@@ -69,16 +69,20 @@ class AuthRepository @Inject constructor(
             val firebaseUser = authResult.user
                 ?: return Resource.Error("Sign in failed: Firebase user is null")
 
-            val isAdmin = (firebaseUser.email == Constants.ADMIN_EMAIL)
+            val userDoc = firestore.collection("users").document(firebaseUser.uid).get().await()
+            val user = if (userDoc.exists()) {
+                userDoc.toObject(User::class.java)!!
+            } else {
+                val isAdmin = (firebaseUser.email == Constants.ADMIN_EMAIL)
+                User(
+                    uid = firebaseUser.uid,
+                    email = firebaseUser.email ?: "",
+                    username = firebaseUser.displayName ?: "",
+                    isAdmin = isAdmin
+                )
+            }
 
-            val user = User(
-                uid = firebaseUser.uid,
-                email = firebaseUser.email ?: "",
-                displayName = firebaseUser.displayName ?: "",
-                isAdmin = isAdmin
-            )
-
-            saveUserToPrefs(user.uid, user.email, user.displayName, user.isAdmin)
+            saveUserToPrefs(user)
 
             Resource.Success(user)
         } catch (e: FirebaseAuthInvalidUserException) {
@@ -108,11 +112,15 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    private fun saveUserToPrefs(uid: String, email: String, displayName: String, isAdmin: Boolean) {
-        prefsManager.saveUserId(uid)
-        prefsManager.saveUserEmail(email)
-        prefsManager.setIsAdmin(isAdmin)
+    private fun saveUserToPrefs(user: User) {
+        prefsManager.saveUserId(user.uid)
+        prefsManager.saveUserEmail(user.email)
+        prefsManager.setIsAdmin(user.isAdmin)
         prefsManager.setLoggedIn(true)
+        prefsManager.setTotalXP(user.totalXP)
+        prefsManager.setCurrentStreak(user.streak)
+        prefsManager.setQuizCount(user.quizzesCompleted)
+        prefsManager.setCorrectAnswersCount(user.correctAnswers)
     }
 
     suspend fun signInAdmin(email: String, password: String): Resource<User> {
@@ -133,20 +141,9 @@ class AuthRepository @Inject constructor(
 
     fun isLoggedIn(): Boolean {
         val firebaseUser = firebaseAuth.currentUser
-        val isPrefsLoggedIn = prefsManager.isLoggedIn()
         
-        if (firebaseUser != null && !isPrefsLoggedIn) {
-            val isAdmin = (firebaseUser.email == Constants.ADMIN_EMAIL)
-            saveUserToPrefs(
-                firebaseUser.uid, 
-                firebaseUser.email ?: "", 
-                firebaseUser.displayName ?: "", 
-                isAdmin
-            )
-            return true
-        }
-        
-        return firebaseUser != null && isPrefsLoggedIn
+        // If firebase is logged in but prefs are cleared (reinstall), we should return true to trigger data restoration
+        return firebaseUser != null
     }
 
     fun isAdmin(): Boolean {

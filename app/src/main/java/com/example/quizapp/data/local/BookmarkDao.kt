@@ -19,4 +19,7 @@ interface BookmarkDao {
 
     @Query("SELECT EXISTS(SELECT 1 FROM bookmarks WHERE questionId = :questionId)")
     fun isBookmarked(questionId: String): Flow<Boolean>
+
+    @Query("SELECT EXISTS(SELECT 1 FROM bookmarks WHERE questionId = :questionId)")
+    suspend fun isBookmarkedSync(questionId: String): Boolean
 }

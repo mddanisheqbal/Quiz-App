@@ -77,6 +77,30 @@ class PreferencesManager @Inject constructor(
         prefs.edit().putInt(Constants.KEY_TOTAL_XP, xp).apply()
     }
 
+    fun getQuizCount(): Int {
+        return prefs.getInt(Constants.KEY_QUIZ_COUNT, 0)
+    }
+
+    fun setQuizCount(count: Int) {
+        prefs.edit().putInt(Constants.KEY_QUIZ_COUNT, count).apply()
+    }
+
+    fun getCorrectAnswersCount(): Int {
+        return prefs.getInt(Constants.KEY_CORRECT_ANSWERS, 0)
+    }
+
+    fun setCorrectAnswersCount(count: Int) {
+        prefs.edit().putInt(Constants.KEY_CORRECT_ANSWERS, count).apply()
+    }
+
+    fun setNotificationsRequested(requested: Boolean) {
+        prefs.edit().putBoolean(Constants.KEY_NOTIFICATIONS_REQUESTED, requested).apply()
+    }
+
+    fun isNotificationsRequested(): Boolean {
+        return prefs.getBoolean(Constants.KEY_NOTIFICATIONS_REQUESTED, false)
+    }
+
     fun clearAll() {
         prefs.edit().clear().apply()
     }

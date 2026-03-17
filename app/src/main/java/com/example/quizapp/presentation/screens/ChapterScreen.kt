@@ -1,5 +1,6 @@
 package com.example.quizapp.presentation.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -15,8 +16,10 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.quizapp.data.model.Topic
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
@@ -33,7 +36,9 @@ fun ChapterScreen(
     quizViewModel: QuizViewModel = hiltViewModel()
 ) {
     val topicsState by quizViewModel.topics.collectAsState()
+    val topicProgress by quizViewModel.topicProgress.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
+    val context = LocalContext.current
 
     LaunchedEffect(categoryId) {
         quizViewModel.loadTopics(categoryId)
@@ -48,7 +53,6 @@ fun ChapterScreen(
         }
     }
 
-    // Determine content color based on luminance for better readability
     val contentColor = if (categoryName == "JavaScript" || categoryName == "HTML") Color.Black else Color.White
 
     Scaffold(
@@ -68,7 +72,6 @@ fun ChapterScreen(
                     )
                 )
                 
-                // Search Bar Area with same category color
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -142,12 +145,27 @@ fun ChapterScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             itemsIndexed(filteredTopics) { index, topic ->
+                                // FEATURE 4 — CHAPTER LIST UI (Stars)
+                                val stars = topicProgress[topic.id] ?: 0
+                                val isCompleted = stars > 0
+                                
+                                // FEATURE 5 — UNLOCK RULE WITH STARS (At least 2 stars to unlock next)
+                                val previousTopicId = topics.getOrNull(index - 1)?.id
+                                val previousStars = if (previousTopicId != null) topicProgress[previousTopicId] ?: 0 else 0
+                                val isUnlocked = index == 0 || previousStars >= 2
+                                
                                 ChapterRow(
                                     number = index + 1,
                                     topic = topic,
                                     categoryColor = categoryColor,
+                                    stars = stars,
+                                    isUnlocked = isUnlocked,
                                     onClick = {
-                                        onNavigateToQuiz(categoryId, topic.id, topic.name)
+                                        if (isUnlocked) {
+                                            onNavigateToQuiz(categoryId, topic.id, topic.name)
+                                        } else {
+                                            Toast.makeText(context, "Get at least 2 stars in the previous chapter to unlock!", Toast.LENGTH_SHORT).show()
+                                        }
                                     }
                                 )
                                 Divider(
@@ -177,8 +195,12 @@ fun ChapterRow(
     number: Int,
     topic: Topic,
     categoryColor: Color,
+    stars: Int,
+    isUnlocked: Boolean,
     onClick: () -> Unit
 ) {
+    val isCompleted = stars > 0
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -186,46 +208,78 @@ fun ChapterRow(
             .padding(vertical = 16.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Number
+        // Status Icon / Number
         Surface(
             modifier = Modifier.size(32.dp),
             shape = CircleShape,
-            color = categoryColor.copy(alpha = 0.1f)
+            color = if (isCompleted) Color(0xFF4CAF50).copy(alpha = 0.1f) 
+                    else if (isUnlocked) categoryColor.copy(alpha = 0.1f)
+                    else Color.Gray.copy(alpha = 0.1f)
         ) {
             Box(contentAlignment = Alignment.Center) {
-                Text(
-                    text = number.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = categoryColor
-                )
+                if (!isUnlocked) {
+                    Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                } else if (isCompleted) {
+                    Icon(Icons.Default.Check, contentDescription = "Completed", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                } else {
+                    Text(
+                        text = number.toString(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = categoryColor
+                    )
+                }
             }
         }
         
         Spacer(modifier = Modifier.width(16.dp))
         
-        // Name
+        // Name and Stars
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = topic.name,
                 style = MaterialTheme.typography.bodyLarge,
                 fontWeight = FontWeight.Medium,
-                color = MaterialTheme.colorScheme.onSurface
+                color = if (isUnlocked) MaterialTheme.colorScheme.onSurface 
+                        else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.5f)
             )
-            if (topic.questionCount > 0) {
+            
+            if (!isUnlocked) {
                 Text(
-                    text = "${topic.questionCount} Questions",
+                    text = "Locked",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
                 )
+            } else {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Show Stars
+                    repeat(3) { index ->
+                        Icon(
+                            imageVector = if (index < stars) Icons.Default.Star else Icons.Default.StarBorder,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = if (index < stars) Color(0xFFFFC107) else Color.Gray.copy(alpha = 0.5f)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Text(
+                        text = if (isCompleted) "Completed" else "${topic.questionCount} Questions",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
         
         // Arrow
-        Icon(
-            imageVector = Icons.Default.ChevronRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-        )
+        if (isUnlocked) {
+            Icon(
+                imageVector = Icons.Default.ChevronRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+        }
     }
 }

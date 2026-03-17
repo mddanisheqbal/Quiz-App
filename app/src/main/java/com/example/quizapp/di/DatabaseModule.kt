@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.example.quizapp.data.local.AppDatabase
 import com.example.quizapp.data.local.BookmarkDao
+import com.example.quizapp.data.local.QuizSessionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -22,11 +23,17 @@ object DatabaseModule {
             context,
             AppDatabase::class.java,
             "quiz_db"
-        ).build()
+        ).fallbackToDestructiveMigration()
+            .build()
     }
 
     @Provides
     fun provideBookmarkDao(database: AppDatabase): BookmarkDao {
         return database.bookmarkDao()
+    }
+
+    @Provides
+    fun provideQuizSessionDao(database: AppDatabase): QuizSessionDao {
+        return database.quizSessionDao()
     }
 }

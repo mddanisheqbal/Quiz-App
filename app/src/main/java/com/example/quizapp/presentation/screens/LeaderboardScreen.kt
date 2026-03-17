@@ -1,10 +1,8 @@
 package com.example.quizapp.presentation.screens
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -13,9 +11,9 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -64,10 +62,24 @@ fun LeaderboardScreen(
                 is Resource.Success -> {
                     val users = state.data ?: emptyList()
                     if (users.isEmpty()) {
-                        Text(
-                            text = "No data available yet",
-                            modifier = Modifier.align(Alignment.Center)
-                        )
+                        Column(
+                            modifier = Modifier.align(Alignment.Center).padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.EmojiEvents,
+                                contentDescription = null,
+                                modifier = Modifier.size(64.dp),
+                                tint = MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f)
+                            )
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(
+                                text = "No players yet. Be the first!",
+                                style = MaterialTheme.typography.headlineSmall,
+                                textAlign = TextAlign.Center,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     } else {
                         LazyColumn(
                             modifier = Modifier.fillMaxSize(),
@@ -98,7 +110,12 @@ fun LeaderboardItem(rank: Int, user: User) {
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (rank == 1) Color(0xFFFFF9C4) else MaterialTheme.colorScheme.surface
+            containerColor = when (rank) {
+                1 -> Color(0xFFFFF9C4) // Goldish for 1st
+                2 -> Color(0xFFF5F5F5) // Silverish for 2nd
+                3 -> Color(0xFFFFF3E0) // Bronzish for 3rd
+                else -> MaterialTheme.colorScheme.surface
+            }
         ),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
@@ -116,15 +133,15 @@ fun LeaderboardItem(rank: Int, user: User) {
                 },
                 fontSize = 20.sp,
                 fontWeight = FontWeight.Bold,
-                modifier = Modifier.width(40.dp)
+                modifier = Modifier.width(44.dp)
             )
             
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
             
             // User Info
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = user.displayName.ifEmpty { "User" },
+                    text = user.username.ifEmpty { "User" },
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -133,25 +150,25 @@ fun LeaderboardItem(rank: Int, user: User) {
                         Icons.Default.Star,
                         contentDescription = null,
                         tint = Color(0xFFFFD700),
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
                         text = "Level ${calculateLevel(user.totalXP)}",
-                        style = MaterialTheme.typography.bodySmall,
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.width(12.dp))
+                    Spacer(modifier = Modifier.width(16.dp))
                     Icon(
                         Icons.Default.LocalFireDepartment,
                         contentDescription = null,
                         tint = Color(0xFFFF6F00),
-                        modifier = Modifier.size(14.dp)
+                        modifier = Modifier.size(16.dp)
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "${user.streakCount} Day Streak",
-                        style = MaterialTheme.typography.bodySmall,
+                        text = "${user.streak} Day Streak",
+                        style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
@@ -161,7 +178,8 @@ fun LeaderboardItem(rank: Int, user: User) {
             Text(
                 text = "${user.totalXP} XP",
                 fontWeight = FontWeight.ExtraBold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                fontSize = 16.sp
             )
         }
     }
