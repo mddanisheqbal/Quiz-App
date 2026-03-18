@@ -4,6 +4,7 @@ import com.example.quizapp.data.local.QuizSessionDao
 import com.example.quizapp.data.local.QuizSessionEntity
 import com.example.quizapp.data.model.*
 import com.example.quizapp.util.Resource
+import com.google.firebase.firestore.FieldValue
 import com.google.firebase.firestore.FirebaseFirestore
 import com.google.firebase.firestore.Query
 import com.google.firebase.firestore.SetOptions
@@ -11,6 +12,7 @@ import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
 import kotlinx.coroutines.tasks.await
+import java.util.*
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -25,7 +27,6 @@ class QuizRepository @Inject constructor(
     private val questionsCollection = firestore.collection("questions")
     private val resultsCollection = firestore.collection("results")
     private val usersCollection = firestore.collection("users")
-    private val leaderboardCollection = firestore.collection("leaderboard")
 
     /**
      * Real-time categories stream
@@ -142,11 +143,11 @@ class QuizRepository @Inject constructor(
     }
 
     /**
-     * Fetch top users for leaderboard
+     * Fetch top users for leaderboard (All Time)
      */
     fun getLeaderboardFlow(): Flow<Resource<List<User>>> = callbackFlow {
         trySend(Resource.Loading())
-        val subscription = leaderboardCollection
+        val subscription = usersCollection
             .orderBy("totalXP", Query.Direction.DESCENDING)
             .limit(50)
             .addSnapshotListener { snapshot, error ->
@@ -155,14 +156,28 @@ class QuizRepository @Inject constructor(
                     return@addSnapshotListener
                 }
                 if (snapshot != null) {
-                    val users = snapshot.documents.mapNotNull { doc ->
-                        User(
-                            uid = doc.getString("uid") ?: "",
-                            username = doc.getString("username") ?: "",
-                            totalXP = doc.getLong("totalXP")?.toInt() ?: 0,
-                            streak = doc.getLong("streak")?.toInt() ?: 0
-                        )
-                    }
+                    val users = snapshot.toObjects(User::class.java)
+                    trySend(Resource.Success(users))
+                }
+            }
+        awaitClose { subscription.remove() }
+    }
+
+    /**
+     * Fetch top users for leaderboard (Monthly)
+     */
+    fun getMonthlyLeaderboardFlow(): Flow<Resource<List<User>>> = callbackFlow {
+        trySend(Resource.Loading())
+        val subscription = usersCollection
+            .orderBy("monthlyXP", Query.Direction.DESCENDING)
+            .limit(50)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null) {
+                    trySend(Resource.Error(error.message ?: "Stream error"))
+                    return@addSnapshotListener
+                }
+                if (snapshot != null) {
+                    val users = snapshot.toObjects(User::class.java)
                     trySend(Resource.Success(users))
                 }
             }
@@ -194,22 +209,6 @@ class QuizRepository @Inject constructor(
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.message ?: "Failed to save result")
-        }
-    }
-
-    suspend fun updateLeaderboard(userId: String, username: String, totalXP: Int, level: Int, streak: Int): Resource<Unit> {
-        return try {
-            val data = mapOf(
-                "uid" to userId,
-                "username" to username,
-                "totalXP" to totalXP,
-                "level" to level,
-                "streak" to streak
-            )
-            leaderboardCollection.document(userId).set(data, SetOptions.merge()).await()
-            Resource.Success(Unit)
-        } catch (e: Exception) {
-            Resource.Error(e.message ?: "Failed to update leaderboard")
         }
     }
 
@@ -325,6 +324,60 @@ class QuizRepository @Inject constructor(
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.message ?: "Failed to mark quiz as completed")
+        }
+    }
+
+    suspend fun updateUserXP(userId: String, xp: Int): Resource<Unit> {
+        return try {
+            val currentMonth = Calendar.getInstance().get(Calendar.MONTH)
+            val userRef = usersCollection.document(userId)
+            val doc = userRef.get().await()
+            val lastResetMonth = doc.getLong("lastResetMonth")?.toInt() ?: -1
+
+            val updates = mutableMapOf<String, Any>(
+                "totalXP" to xp,
+                "monthlyXP" to FieldValue.increment((xp - (doc.getLong("totalXP")?.toInt() ?: 0)).toLong())
+            )
+
+            // Monthly reset check
+            if (lastResetMonth != currentMonth) {
+                updates["monthlyXP"] = xp - (doc.getLong("totalXP")?.toInt() ?: 0)
+                updates["lastResetMonth"] = currentMonth
+            }
+
+            userRef.update(updates).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to update XP")
+        }
+    }
+
+    suspend fun updateUserLevel(userId: String, level: Int): Resource<Unit> {
+        return try {
+            usersCollection.document(userId).update("level", level).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to update level")
+        }
+    }
+
+    suspend fun rewardMonthlyTopUsers(): Resource<Unit> {
+        return try {
+            val snapshot = usersCollection.orderBy("monthlyXP", Query.Direction.DESCENDING).limit(3).get().await()
+            snapshot.documents.forEachIndexed { index, doc ->
+                val reward = when(index) {
+                    0 -> 1000L
+                    1 -> 500L
+                    2 -> 250L
+                    else -> 0L
+                }
+                if (reward > 0) {
+                    doc.reference.update("coins", FieldValue.increment(reward)).await()
+                }
+            }
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to reward top users")
         }
     }
 

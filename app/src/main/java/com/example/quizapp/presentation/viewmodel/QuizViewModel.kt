@@ -1,6 +1,7 @@
 package com.example.quizapp.presentation.viewmodel
 
 import android.app.Activity
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quizapp.data.local.BookmarkDao
@@ -99,6 +100,9 @@ class QuizViewModel @Inject constructor(
     private val _leaderboard = MutableStateFlow<Resource<List<User>>>(Resource.Loading())
     val leaderboard: StateFlow<Resource<List<User>>> = _leaderboard
 
+    private val _monthlyLeaderboard = MutableStateFlow<Resource<List<User>>>(Resource.Loading())
+    val monthlyLeaderboard: StateFlow<Resource<List<User>>> = _monthlyLeaderboard
+
     private val _xpAwardedInThisSession = MutableStateFlow<Int?>(null)
     val xpAwardedInThisSession: StateFlow<Int?> = _xpAwardedInThisSession
 
@@ -140,6 +144,10 @@ class QuizViewModel @Inject constructor(
 
     private var pendingSession: QuizSessionEntity? = null
     private var isSessionInitialized = false
+
+    // Level Up State
+    private val _showLevelUpDialog = MutableStateFlow<Int?>(null)
+    val showLevelUpDialog: StateFlow<Int?> = _showLevelUpDialog
 
     init {
         restoreUserData()
@@ -433,6 +441,18 @@ class QuizViewModel @Inject constructor(
     private fun checkAnswer(questionId: String, userAnswer: String) {
         val question = _questions.value.find { it.id == questionId } ?: return
         val isCorrect = userAnswer.equals(question.correctAnswer, true)
+        
+        // XP SYSTEM: AWARD EXACTLY 3 XP PER CORRECT ANSWER
+        if (isCorrect && !_isPreviouslyCompleted.value) {
+            val earnedXp = 3 
+            addXP(earnedXp)
+            
+            // Track session XP for display in ResultScreen
+            _xpAwardedInThisSession.value = (_xpAwardedInThisSession.value ?: 0) + earnedXp
+            
+            Log.d("XP_DEBUG", "XP Updated instantly: earned $earnedXp, total ${_totalXP.value}")
+        }
+
         val map = _answerState.value.toMutableMap()
         map[questionId] = if (isCorrect) AnswerState.CORRECT else AnswerState.INCORRECT
         _answerState.value = map
@@ -550,7 +570,7 @@ class QuizViewModel @Inject constructor(
                     val ua = session.answers[q.id].orEmpty()
                     val isCorrect = ua.equals(q.correctAnswer, true)
                     if (isCorrect) {
-                        totalScore += q.points
+                        totalScore += 3 // Align score with XP: 3 points per correct answer
                     }
                     answersMap[index.toString()] = UserAnswer(q.id, q.questionText, ua, q.correctAnswer, isCorrect, 0)
                 }
@@ -568,7 +588,7 @@ class QuizViewModel @Inject constructor(
                     wrongAnswers = totalQuestionsCount - correctCount,
                     skippedAnswers = 0,
                     totalScore = totalScore,
-                    maxScore = questionsList.sumOf { it.points },
+                    maxScore = totalQuestionsCount * 3,
                     percentage = percentage.toFloat(),
                     timeTaken = timeTaken,
                     answers = answersMap,
@@ -590,10 +610,9 @@ class QuizViewModel @Inject constructor(
                     if (progressResult is Resource.Success) {
                         val isAlreadyCompleted = quizRepository.isQuizCompleted(userId, currentQuizId)
                         if (!isAlreadyCompleted) {
-                            val xp = correctCount * Constants.XP_PER_CORRECT_ANSWER
-                            addXP(xp)
-                            _xpAwardedInThisSession.value = xp
-                            quizRepository.markQuizAsCompleted(userId, currentQuizId, xp)
+                            // XP is now added instantly per question in checkAnswer.
+                            // We mark it completed with 0 XP here to avoid double awarding.
+                            quizRepository.markQuizAsCompleted(userId, currentQuizId, 0)
                         }
 
                         if (starsEarned >= 2) {
@@ -629,7 +648,43 @@ class QuizViewModel @Inject constructor(
     private fun addXP(xp: Int) {
         val updatedXP = _totalXP.value + xp
         _totalXP.value = updatedXP
-        viewModelScope.launch { prefsManager.setTotalXP(updatedXP) }
+        
+        // AUTO LEVEL UP LOGIC
+        val newLevel = calculateLevel(updatedXP)
+        val oldLevel = _userLevel.value
+        
+        if (newLevel > oldLevel) {
+            _userLevel.value = newLevel
+            _showLevelUpDialog.value = newLevel
+        }
+        
+        viewModelScope.launch { 
+            prefsManager.setTotalXP(updatedXP)
+            val userId = FirebaseAuth.getInstance().currentUser?.uid
+            if (userId != null) {
+                quizRepository.updateUserXP(userId, updatedXP)
+                if (newLevel > oldLevel) {
+                    quizRepository.updateUserLevel(userId, newLevel)
+                }
+            }
+        }
+    }
+
+    private fun calculateLevel(xp: Int): Int {
+        val thresholds = Constants.LEVEL_THRESHOLDS
+        var level = 1
+        for (i in 1 until thresholds.size) {
+            if (xp >= thresholds[i]) {
+                level = i + 1
+            } else {
+                break
+            }
+        }
+        return level
+    }
+
+    fun dismissLevelUpDialog() {
+        _showLevelUpDialog.value = null
     }
 
     private fun checkBookmarkStatus(questionId: String) {
@@ -663,6 +718,14 @@ class QuizViewModel @Inject constructor(
         viewModelScope.launch {
             quizRepository.getLeaderboardFlow().collect {
                 _leaderboard.value = it
+            }
+        }
+    }
+
+    fun loadMonthlyLeaderboard() {
+        viewModelScope.launch {
+            quizRepository.getMonthlyLeaderboardFlow().collect {
+                _monthlyLeaderboard.value = it
             }
         }
     }

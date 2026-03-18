@@ -57,10 +57,8 @@ class AuthRepository @Inject constructor(
                 createdAt = System.currentTimeMillis()
             )
 
-            firestore.collection("users")
-                .document(firebaseUser.uid)
-                .set(user)
-                .await()
+            // ⭐ IMPORTANT: We DON'T create Firestore user document until email is verified
+            // This prevents fake emails from having persistent data until they prove ownership
 
             Resource.Success(user)
 
@@ -81,6 +79,7 @@ class AuthRepository @Inject constructor(
             val firebaseUser = authResult.user
                 ?: return Resource.Error("Sign in failed: Firebase user is null")
 
+            // ⭐ BLOCK UNVERIFIED USERS
             if (!firebaseUser.isEmailVerified) {
                 signOut()
                 return Resource.Error("Please verify your email address. A verification link was sent to $email.")
@@ -90,13 +89,17 @@ class AuthRepository @Inject constructor(
             val user = if (userDoc.exists()) {
                 userDoc.toObject(User::class.java)!!
             } else {
+                // If user is verified but document doesn't exist (from signup), create it now
                 val isAdmin = (firebaseUser.email == Constants.ADMIN_EMAIL)
-                User(
+                val newUser = User(
                     uid = firebaseUser.uid,
-                    email = firebaseUser.email ?: "",
-                    username = firebaseUser.displayName ?: "",
-                    isAdmin = isAdmin
+                    email = firebaseUser.email ?: email,
+                    username = firebaseUser.displayName ?: "User",
+                    isAdmin = isAdmin,
+                    createdAt = System.currentTimeMillis()
                 )
+                firestore.collection("users").document(firebaseUser.uid).set(newUser).await()
+                newUser
             }
 
             saveUserToPrefs(user)

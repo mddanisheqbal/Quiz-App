@@ -34,7 +34,9 @@ fun LevelProgressScreen(
     val thresholds = Constants.LEVEL_THRESHOLDS
     val currentLevelXP = thresholds.getOrElse(userLevel - 1) { 0 }
     val nextLevelXP = thresholds.getOrElse(userLevel) { thresholds.last() }
-    val remainingXP = nextLevelXP - totalXP
+    
+    // FIX: Avoid negative XP display
+    val remainingXP = maxOf(nextLevelXP - totalXP, 0)
     
     val progress = if (nextLevelXP > currentLevelXP) {
         (totalXP - currentLevelXP).toFloat() / (nextLevelXP - currentLevelXP).toFloat()
@@ -71,12 +73,10 @@ fun LevelProgressScreen(
                     shape = RoundedCornerShape(24.dp),
                     elevation = CardDefaults.cardElevation(4.dp)
                 ) {
-                    // FEATURE 3 — CENTER UI PROPERLY
                     Column(
                         modifier = Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        // FEATURE 4 — UPDATED UI STRUCTURE
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,
@@ -86,7 +86,7 @@ fun LevelProgressScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
-                        // FEATURE 1 — REMOVE "PROGRAMMER"
+                        // DYNAMIC LEVEL DISPLAY
                         Text(
                             text = "Level $userLevel",
                             fontSize = 30.sp,

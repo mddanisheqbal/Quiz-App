@@ -6,6 +6,8 @@ data class User(
     val username: String = "",
     val profilePictureUrl: String? = null,
     val totalXP: Int = 0,
+    val monthlyXP: Int = 0, // Feature 3: Monthly Leaderboard
+    val lastResetMonth: Int = -1, // To track monthly reset
     val level: Int = 1,
     val streak: Int = 0,
     val correctAnswers: Int = 0,

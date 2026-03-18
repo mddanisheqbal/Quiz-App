@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.MenuBook
@@ -20,7 +21,6 @@ import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.quizapp.data.model.Topic
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
@@ -48,7 +48,6 @@ fun ChapterScreen(
     val defaultColor = MaterialTheme.colorScheme.primary
     val categoryColor = remember(categoryColorString) {
         try {
-            // Ensure hex starts with #
             val hex = if (categoryColorString.startsWith("#")) categoryColorString else "#$categoryColorString"
             Color(android.graphics.Color.parseColor(hex))
         } catch (e: Exception) {
@@ -56,7 +55,6 @@ fun ChapterScreen(
         }
     }
 
-    // Dynamic content color based on background luminance
     val contentColor = remember(categoryColor) {
         val argb = categoryColor.toArgb()
         val luminance = 0.2126 * android.graphics.Color.red(argb) + 
@@ -82,38 +80,16 @@ fun ChapterScreen(
                     )
                 )
                 
+                // Redesigned Search Bar for visibility in both modes
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
                         .background(categoryColor)
                         .padding(horizontal = 16.dp, vertical = 8.dp)
                 ) {
-                    TextField(
-                        value = searchQuery,
-                        onValueChange = { searchQuery = it },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
-                        placeholder = { Text("Search chapters...", color = contentColor.copy(alpha = 0.6f)) },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = contentColor.copy(alpha = 0.6f)) },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = contentColor.copy(alpha = 0.6f))
-                                }
-                            }
-                        },
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = MaterialTheme.colorScheme.surface,
-                            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                            disabledContainerColor = MaterialTheme.colorScheme.surface,
-                            focusedIndicatorColor = Color.Transparent,
-                            unfocusedIndicatorColor = Color.Transparent,
-                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
-                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
-                        ),
-                        shape = MaterialTheme.shapes.medium,
-                        singleLine = true
+                    ChapterSearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it }
                     )
                 }
             }
@@ -200,6 +176,53 @@ fun ChapterScreen(
 }
 
 @Composable
+fun ChapterSearchBar(query: String, onQueryChange: (String) -> Unit) {
+    TextField(
+        value = query,
+        onValueChange = onQueryChange,
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(52.dp),
+        placeholder = { 
+            Text(
+                "Search chapters...", 
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            ) 
+        },
+        leadingIcon = { 
+            Icon(
+                Icons.Default.Search, 
+                contentDescription = null, 
+                tint = MaterialTheme.colorScheme.onSurfaceVariant 
+            ) 
+        },
+        trailingIcon = {
+            if (query.isNotEmpty()) {
+                IconButton(onClick = { onQueryChange("") }) {
+                    Icon(
+                        Icons.Default.Clear, 
+                        contentDescription = "Clear", 
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        },
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = MaterialTheme.colorScheme.surface,
+            unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+            disabledContainerColor = MaterialTheme.colorScheme.surface,
+            focusedIndicatorColor = Color.Transparent,
+            unfocusedIndicatorColor = Color.Transparent,
+            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+            unfocusedTextColor = MaterialTheme.colorScheme.onSurface,
+            cursorColor = MaterialTheme.colorScheme.primary
+        ),
+        shape = RoundedCornerShape(12.dp),
+        singleLine = true
+    )
+}
+
+@Composable
 fun ChapterRow(
     number: Int,
     topic: Topic,
@@ -217,19 +240,28 @@ fun ChapterRow(
             .padding(vertical = 16.dp, horizontal = 16.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // Status Icon / Number
         Surface(
             modifier = Modifier.size(32.dp),
             shape = CircleShape,
             color = if (isCompleted) Color(0xFF4CAF50).copy(alpha = 0.1f) 
                     else if (isUnlocked) categoryColor.copy(alpha = 0.1f)
-                    else Color.Gray.copy(alpha = 0.1f)
+                    else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f)
         ) {
             Box(contentAlignment = Alignment.Center) {
                 if (!isUnlocked) {
-                    Icon(Icons.Default.Lock, contentDescription = "Locked", tint = Color.Gray, modifier = Modifier.size(16.dp))
+                    Icon(
+                        Icons.Default.Lock, 
+                        contentDescription = "Locked", 
+                        tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f), 
+                        modifier = Modifier.size(16.dp)
+                    )
                 } else if (isCompleted) {
-                    Icon(Icons.Default.Check, contentDescription = "Completed", tint = Color(0xFF4CAF50), modifier = Modifier.size(20.dp))
+                    Icon(
+                        Icons.Default.Check, 
+                        contentDescription = "Completed", 
+                        tint = Color(0xFF4CAF50), 
+                        modifier = Modifier.size(20.dp)
+                    )
                 } else {
                     Text(
                         text = number.toString(),
@@ -243,7 +275,6 @@ fun ChapterRow(
         
         Spacer(modifier = Modifier.width(16.dp))
         
-        // Name and Stars
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = topic.name,
@@ -261,13 +292,12 @@ fun ChapterRow(
                 )
             } else {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    // Show Stars
                     repeat(3) { index ->
                         Icon(
                             imageVector = if (index < stars) Icons.Default.Star else Icons.Default.StarBorder,
                             contentDescription = null,
                             modifier = Modifier.size(16.dp),
-                            tint = if (index < stars) Color(0xFFFFC107) else Color.Gray.copy(alpha = 0.5f)
+                            tint = if (index < stars) Color(0xFFFFC107) else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f)
                         )
                     }
                     
@@ -282,7 +312,6 @@ fun ChapterRow(
             }
         }
         
-        // Arrow
         if (isUnlocked) {
             Icon(
                 imageVector = Icons.Default.ChevronRight,
