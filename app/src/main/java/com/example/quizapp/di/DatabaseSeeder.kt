@@ -27,19 +27,19 @@ class DatabaseSeeder @Inject constructor(
     fun seedDatabaseIfNeeded() {
         val prefs = context.getSharedPreferences("quiz_prefs", Context.MODE_PRIVATE)
 
-
-        val isSeeded = prefs.getBoolean("database_seeded_v42", false)
+        // Incrementing version to re-seed with new colors
+        val isSeeded = prefs.getBoolean("database_seeded_v43", false)
 
         if (isSeeded) {
-            Log.d("DatabaseSeeder", "Database already seeded (v42). Skipping.")
+            Log.d("DatabaseSeeder", "Database already seeded (v43). Skipping.")
             return
         }
 
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                Log.d("DatabaseSeeder", "Starting database seeding (v42)...")
+                Log.d("DatabaseSeeder", "Starting database seeding (v43)...")
                 seedDatabase()
-                prefs.edit().putBoolean("database_seeded_v42", true).apply()
+                prefs.edit().putBoolean("database_seeded_v43", true).apply()
                 Log.d("DatabaseSeeder", "Database seeding completed.")
             } catch (e: Exception) {
                 Log.e("DatabaseSeeder", "Seeding failed", e)
@@ -54,14 +54,14 @@ class DatabaseSeeder @Inject constructor(
         ).format(Date())
 
         val categoryList = listOf(
-            Category("c", "C", colorHex = "#4CAF50", icon = "C"),
+            Category("c", "C", colorHex = "#1565C0", icon = "C"),
             Category("cpp", "C++", colorHex = "#2196F3", icon = "C++"),
-            Category("java", "Java", colorHex = "#F44336", icon = "coffee"),
-            Category("python", "Python", colorHex = "#9C27B0", icon = "snake"),
-            Category("kotlin", "Kotlin", colorHex = "#7E57C2", icon = "K"),
-            Category("html", "HTML", colorHex = "#FF9800", icon = "</>"),
-            Category("css", "CSS", colorHex = "#3F51B5", icon = "#"),
-            Category("javascript", "JavaScript", colorHex = "#FFEB3B", icon = "JS")
+            Category("java", "Java", colorHex = "#E57373", icon = "coffee"),
+            Category("python", "Python", colorHex = "#6A1B9A", icon = "snake"),
+            Category("kotlin", "Kotlin", colorHex = "#00897B", icon = "K"),
+            Category("html", "HTML", colorHex = "#F9A825", icon = "</>"),
+            Category("css", "CSS", colorHex = "#C62828", icon = "#"),
+            Category("javascript", "JavaScript", colorHex = "#1E3A8A", icon = "JS")
         )
 
         // 1️⃣ Prepare categories with counts beforehand

@@ -21,6 +21,7 @@ import com.example.quizapp.R
 import com.example.quizapp.presentation.viewmodel.AuthViewModel
 import com.example.quizapp.ui.theme.GradientEnd
 import com.example.quizapp.ui.theme.GradientStart
+import com.google.firebase.auth.FirebaseAuth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -31,14 +32,13 @@ fun SplashScreen(
     onNavigateToAdminDashboard: () -> Unit,
     authViewModel: AuthViewModel = hiltViewModel()
 ) {
-    val isLoggedIn by authViewModel.isLoggedIn.collectAsState()
+    val isLoggedIn = remember { FirebaseAuth.getInstance().currentUser != null }
     val isAdmin by authViewModel.isAdmin.collectAsState()
 
     val animatableScale = remember { Animatable(0.5f) }
     val animatableAlpha = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
-        // Run scale and alpha animations in parallel
         launch {
             animatableScale.animateTo(
                 targetValue = 1f,
@@ -52,12 +52,19 @@ fun SplashScreen(
             )
         }
 
-        delay(1200) // Wait for animation + a small buffer
+        delay(1500)
         
-        when {
-            isAdmin -> onNavigateToAdminDashboard()
-            isLoggedIn -> onNavigateToHome()
-            else -> onNavigateToLogin()
+        // FEATURE 3 & 7 — Direct session check
+        if (isLoggedIn) {
+            // Only go to admin if they are the specific admin email
+            val currentUser = FirebaseAuth.getInstance().currentUser
+            if (currentUser?.email == "admin@gmail.com") {
+                onNavigateToAdminDashboard()
+            } else {
+                onNavigateToHome()
+            }
+        } else {
+            onNavigateToLogin()
         }
     }
 
@@ -91,15 +98,6 @@ fun SplashScreen(
                 fontSize = 36.sp,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.alpha(animatableAlpha.value)
-            )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Text(
-                text = "Test Your Knowledge",
-                fontSize = 16.sp,
-                color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
                 modifier = Modifier.alpha(animatableAlpha.value)
             )
         }

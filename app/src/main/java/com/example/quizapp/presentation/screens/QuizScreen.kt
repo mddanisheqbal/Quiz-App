@@ -30,6 +30,7 @@ import com.example.quizapp.data.model.Question
 import com.example.quizapp.data.model.QuestionType
 import com.example.quizapp.presentation.viewmodel.AnswerState
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
+import com.example.quizapp.presentation.viewmodel.UserViewModel
 import com.example.quizapp.ui.theme.CorrectGreen
 import com.example.quizapp.ui.theme.IncorrectRed
 import com.example.quizapp.util.Resource
@@ -44,7 +45,8 @@ fun QuizScreen(
     topicName: String,
     onNavigateToResult: () -> Unit,
     onNavigateBack: () -> Unit,
-    quizViewModel: QuizViewModel = hiltViewModel()
+    quizViewModel: QuizViewModel = hiltViewModel(),
+    userViewModel: UserViewModel = hiltViewModel()
 ) {
     val context = LocalContext.current
     val questions by quizViewModel.questions.collectAsStateWithLifecycle()
@@ -61,7 +63,7 @@ fun QuizScreen(
     val resumeMessage by quizViewModel.resumeMessage.collectAsStateWithLifecycle()
     
     // Feature 8: Power-ups
-    val coins by quizViewModel.coins.collectAsStateWithLifecycle()
+    val coins by userViewModel.coins.collectAsStateWithLifecycle()
     val isHintVisible by quizViewModel.isHintVisible.collectAsStateWithLifecycle()
     val removedOptions by quizViewModel.removedOptions.collectAsStateWithLifecycle()
 

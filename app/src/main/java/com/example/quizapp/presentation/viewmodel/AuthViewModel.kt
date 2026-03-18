@@ -1,10 +1,16 @@
 package com.example.quizapp.presentation.viewmodel
 
+import android.content.Context
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.quizapp.R
 import com.example.quizapp.data.model.User
 import com.example.quizapp.data.repository.AuthRepository
 import com.example.quizapp.util.Resource
+import com.google.android.gms.auth.api.signin.GoogleSignIn
+import com.google.android.gms.auth.api.signin.GoogleSignInClient
+import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -28,15 +34,14 @@ class AuthViewModel @Inject constructor(
     private val _resetPasswordState = MutableStateFlow<Resource<String>?>(null)
     val resetPasswordState: StateFlow<Resource<String>?> = _resetPasswordState
 
+    private val _verificationState = MutableStateFlow<Resource<String>?>(null)
+    val verificationState: StateFlow<Resource<String>?> = _verificationState
+
     fun signUp(email: String, password: String, displayName: String) {
         viewModelScope.launch {
             _authState.value = Resource.Loading()
             val result = authRepository.signUp(email, password, displayName)
             _authState.value = result
-
-            if (result is Resource.Success<User>) {
-                _isLoggedIn.value = true
-            }
         }
     }
 
@@ -50,6 +55,40 @@ class AuthViewModel @Inject constructor(
                 _isLoggedIn.value = true
                 _isAdmin.value = result.data?.isAdmin ?: false
             }
+        }
+    }
+
+    fun signInWithGoogle(idToken: String) {
+        viewModelScope.launch {
+            Log.d("GOOGLE_LOGIN", "Started Firebase Auth with ID Token")
+            _authState.value = Resource.Loading()
+            val result = authRepository.signInWithGoogle(idToken)
+            _authState.value = result
+
+            if (result is Resource.Success<User>) {
+                Log.d("GOOGLE_LOGIN", "Success: User logged in")
+                _isLoggedIn.value = true
+                _isAdmin.value = result.data?.isAdmin ?: false
+            } else if (result is Resource.Error) {
+                Log.e("GOOGLE_LOGIN", "Failed: ${result.message}")
+            }
+        }
+    }
+
+    fun getGoogleSignInClient(context: Context): GoogleSignInClient {
+        val options = GoogleSignInOptions.Builder(GoogleSignInOptions.DEFAULT_SIGN_IN)
+            .requestIdToken(context.getString(R.string.default_web_client_id))
+            .requestEmail()
+            .build()
+
+        return GoogleSignIn.getClient(context, options)
+    }
+
+    fun resendVerificationEmail() {
+        viewModelScope.launch {
+            _verificationState.value = Resource.Loading()
+            val result = authRepository.resendVerificationEmail()
+            _verificationState.value = result
         }
     }
 
@@ -74,11 +113,18 @@ class AuthViewModel @Inject constructor(
         }
     }
 
-    fun signOut() {
-        authRepository.signOut()
-        _isLoggedIn.value = false
-        _isAdmin.value = false
-        _authState.value = null
+    fun signOut(context: Context) {
+        viewModelScope.launch {
+            try {
+                getGoogleSignInClient(context).signOut()
+            } catch (e: Exception) {
+                Log.e("AUTH", "Error signing out from Google", e)
+            }
+            authRepository.signOut()
+            _isLoggedIn.value = false
+            _isAdmin.value = false
+            _authState.value = null
+        }
     }
 
     fun resetAuthState() {
@@ -87,5 +133,9 @@ class AuthViewModel @Inject constructor(
 
     fun resetPasswordState() {
         _resetPasswordState.value = null
+    }
+
+    fun resetVerificationState() {
+        _verificationState.value = null
     }
 }

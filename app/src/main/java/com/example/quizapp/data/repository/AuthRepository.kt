@@ -1,5 +1,6 @@
 package com.example.quizapp.data.repository
 
+import android.util.Log
 import android.util.Patterns
 import com.example.quizapp.data.model.User
 import com.example.quizapp.util.Constants
@@ -9,6 +10,7 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseAuthInvalidCredentialsException
 import com.google.firebase.auth.FirebaseAuthInvalidUserException
 import com.google.firebase.auth.FirebaseAuthUserCollisionException
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.google.firebase.firestore.FirebaseFirestore
 import kotlinx.coroutines.tasks.await
@@ -39,6 +41,14 @@ class AuthRepository @Inject constructor(
                 .build()
 
             firebaseUser.updateProfile(profileUpdates).await()
+            
+            // Feature 2: Send Email Verification
+            try {
+                firebaseUser.sendEmailVerification().await()
+                Log.d("AUTH_DEBUG", "Verification email sent to $email")
+            } catch (e: Exception) {
+                Log.e("AUTH_DEBUG", "Failed to send verification email", e)
+            }
 
             val user = User(
                 uid = firebaseUser.uid,
@@ -52,8 +62,6 @@ class AuthRepository @Inject constructor(
                 .set(user)
                 .await()
 
-            saveUserToPrefs(user)
-
             Resource.Success(user)
 
         } catch (e: FirebaseAuthUserCollisionException) {
@@ -64,10 +72,19 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun signIn(email: String, password: String): Resource<User> {
+        if (!Patterns.EMAIL_ADDRESS.matcher(email).matches()) {
+            return Resource.Error("Please enter a valid email address.")
+        }
+
         return try {
             val authResult = firebaseAuth.signInWithEmailAndPassword(email, password).await()
             val firebaseUser = authResult.user
                 ?: return Resource.Error("Sign in failed: Firebase user is null")
+
+            if (!firebaseUser.isEmailVerified) {
+                signOut()
+                return Resource.Error("Please verify your email address. A verification link was sent to $email.")
+            }
 
             val userDoc = firestore.collection("users").document(firebaseUser.uid).get().await()
             val user = if (userDoc.exists()) {
@@ -91,6 +108,61 @@ class AuthRepository @Inject constructor(
             Resource.Error("Invalid email or password.")
         } catch (e: Exception) {
             Resource.Error(e.message ?: "An unknown error occurred during sign in")
+        }
+    }
+
+    suspend fun signInWithGoogle(idToken: String): Resource<User> {
+        return try {
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            val authResult = firebaseAuth.signInWithCredential(credential).await()
+            val firebaseUser = authResult.user ?: return Resource.Error("Google sign in failed: Firebase user is null")
+
+            val userDoc = firestore.collection("users").document(firebaseUser.uid).get().await()
+            val user = if (userDoc.exists()) {
+                val existingUser = userDoc.toObject(User::class.java)!!
+                // Update profile picture if it changed or was missing
+                if (existingUser.profilePictureUrl != firebaseUser.photoUrl?.toString()) {
+                    val updatedUser = existingUser.copy(profilePictureUrl = firebaseUser.photoUrl?.toString())
+                    firestore.collection("users").document(firebaseUser.uid).set(updatedUser).await()
+                    updatedUser
+                } else {
+                    existingUser
+                }
+            } else {
+                val newUser = User(
+                    uid = firebaseUser.uid,
+                    email = firebaseUser.email ?: "",
+                    username = firebaseUser.displayName ?: "User",
+                    profilePictureUrl = firebaseUser.photoUrl?.toString(),
+                    coins = 0,
+                    totalXP = 0,
+                    level = 1,
+                    streak = 0,
+                    createdAt = System.currentTimeMillis()
+                )
+                firestore.collection("users").document(firebaseUser.uid).set(newUser).await()
+                newUser
+            }
+
+            saveUserToPrefs(user)
+            Resource.Success(user)
+        } catch (e: Exception) {
+            Log.e("GOOGLE_AUTH", "Error in signInWithGoogle", e)
+            Resource.Error(e.message ?: "Google Sign-In failed")
+        }
+    }
+
+    suspend fun resendVerificationEmail(): Resource<String> {
+        return try {
+            val user = firebaseAuth.currentUser
+            if (user != null) {
+                user.sendEmailVerification().await()
+                Resource.Success("Verification email sent.")
+            } else {
+                Resource.Error("No user found. Please login first.")
+            }
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to resend verification email.")
         }
     }
 
@@ -141,13 +213,11 @@ class AuthRepository @Inject constructor(
 
     fun isLoggedIn(): Boolean {
         val firebaseUser = firebaseAuth.currentUser
-        
-        // If firebase is logged in but prefs are cleared (reinstall), we should return true to trigger data restoration
-        return firebaseUser != null
+        return firebaseUser != null && (firebaseUser.isEmailVerified || firebaseUser.providerData.any { it.providerId == "google.com" })
     }
 
     fun isAdmin(): Boolean {
-        return prefsManager.isAdmin() || (firebaseAuth.currentUser?.email == Constants.ADMIN_EMAIL)
+        return (prefsManager.isAdmin() || (firebaseAuth.currentUser?.email == Constants.ADMIN_EMAIL))
     }
 
     fun getCurrentUserId(): String? {

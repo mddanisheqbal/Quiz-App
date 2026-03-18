@@ -2,15 +2,15 @@ package com.example.quizapp.presentation.navigation
 
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
-import androidx.compose.runtime.Composable
+import androidx.compose.runtime.*
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.*
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.quizapp.presentation.screens.*
 import com.example.quizapp.presentation.screens.admin.*
-import com.example.quizapp.presentation.viewmodel.AuthViewModel
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
+import com.example.quizapp.presentation.viewmodel.UserViewModel
 
 @Composable
 fun NavGraph(
@@ -79,20 +79,27 @@ fun NavGraph(
         }
 
         navigation(startDestination = Screen.Home.route, route = "main_flow") {
-            composable(Screen.Home.route) {
+            composable(Screen.Home.route) { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                
                 MainDrawerScreen(navController = navController) {
                     HomeScreen(
+                        userViewModel = userViewModel,
                         onNavigateToTopic = { categoryId, categoryName, categoryColor ->
-                            navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName, categoryColor))
-                        },
-                        onNavigateToQuiz = { categoryId, categoryName ->
-                            // This navigate logic is usually handled through chapters
+                            // Strip # for URL safety
+                            val safeColor = categoryColor.replace("#", "")
+                            navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName, safeColor))
                         },
                         onNavigateToHistory = { navController.navigate(Screen.History.route) },
                         onNavigateToLevelProgress = { navController.navigate(Screen.LevelProgress.route) },
                         onNavigateToStreakDetails = { navController.navigate(Screen.StreakDetails.route) },
                         onNavigateToLeaderboard = { navController.navigate(Screen.Leaderboard.route) },
                         onNavigateToDailyChallenge = { navController.navigate(Screen.DailyChallenge.route) },
+                        onNavigateToStore = { navController.navigate(Screen.Store.route) },
+                        onNavigateToProfile = { navController.navigate(Screen.Profile.route) },
                         onLogout = {
                             navController.navigate(Screen.Login.route) {
                                 popUpTo("main_flow") { inclusive = true }
@@ -100,6 +107,23 @@ fun NavGraph(
                         }
                     )
                 }
+            }
+
+            composable(Screen.Profile.route) { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                
+                ProfileScreen(
+                    onNavigateBack = { navController.popBackStack() },
+                    onLogout = {
+                        navController.navigate(Screen.Login.route) {
+                            popUpTo("main_flow") { inclusive = true }
+                        }
+                    },
+                    userViewModel = userViewModel
+                )
             }
 
             composable(
@@ -133,7 +157,12 @@ fun NavGraph(
                     navArgument("topicName") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
-                val quizViewModel: QuizViewModel = hiltViewModel(navController.getBackStackEntry("main_flow"))
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                val quizViewModel: QuizViewModel = hiltViewModel(parentEntry)
+                
                 val categoryId = backStackEntry.arguments?.getString("categoryId") ?: ""
                 val topicId = backStackEntry.arguments?.getString("topicId") ?: ""
                 val topicName = backStackEntry.arguments?.getString("topicName") ?: ""
@@ -143,6 +172,7 @@ fun NavGraph(
                     topicId = topicId,
                     topicName = topicName,
                     quizViewModel = quizViewModel,
+                    userViewModel = userViewModel,
                     onNavigateToResult = {
                         navController.navigate(Screen.Result.route) {
                             popUpTo(Screen.Quiz.route) { inclusive = true }
@@ -152,10 +182,16 @@ fun NavGraph(
                 )
             }
 
-            composable(Screen.Result.route) {
-                val quizViewModel: QuizViewModel = hiltViewModel(navController.getBackStackEntry("main_flow"))
+            composable(Screen.Result.route) { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                val quizViewModel: QuizViewModel = hiltViewModel(parentEntry)
+                
                 ResultScreen(
                     quizViewModel = quizViewModel,
+                    userViewModel = userViewModel,
                     onNavigateToHome = {
                         navController.navigate(Screen.Home.route) {
                             popUpTo("main_flow") { inclusive = true }
@@ -183,8 +219,15 @@ fun NavGraph(
                 }
             }
 
-            composable(Screen.LevelProgress.route) {
-                LevelProgressScreen(onNavigateBack = { navController.popBackStack() })
+            composable(Screen.LevelProgress.route) { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                LevelProgressScreen(
+                    userViewModel = userViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.StreakDetails.route) {
@@ -203,6 +246,18 @@ fun NavGraph(
                 MainDrawerScreen(navController = navController) {
                     AchievementsScreen(onNavigateBack = { navController.popBackStack() })
                 }
+            }
+
+            composable(Screen.Store.route) { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                
+                StoreScreen(
+                    userViewModel = userViewModel,
+                    onBackClick = { navController.popBackStack() }
+                )
             }
         }
 

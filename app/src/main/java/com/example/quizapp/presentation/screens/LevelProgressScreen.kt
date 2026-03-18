@@ -18,16 +18,18 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
+import com.example.quizapp.presentation.viewmodel.UserViewModel
 import com.example.quizapp.util.Constants
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LevelProgressScreen(
     onNavigateBack: () -> Unit,
-    quizViewModel: QuizViewModel = hiltViewModel()
+    quizViewModel: QuizViewModel = hiltViewModel(),
+    userViewModel: UserViewModel = hiltViewModel()
 ) {
-    val totalXP by quizViewModel.totalXP.collectAsState()
-    val userLevel by quizViewModel.userLevel.collectAsState()
+    val totalXP by userViewModel.totalXP.collectAsState()
+    val userLevel by userViewModel.userLevel.collectAsState()
     
     val thresholds = Constants.LEVEL_THRESHOLDS
     val currentLevelXP = thresholds.getOrElse(userLevel - 1) { 0 }
@@ -69,10 +71,12 @@ fun LevelProgressScreen(
                     shape = RoundedCornerShape(24.dp),
                     elevation = CardDefaults.cardElevation(4.dp)
                 ) {
+                    // FEATURE 3 — CENTER UI PROPERLY
                     Column(
                         modifier = Modifier.padding(24.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // FEATURE 4 — UPDATED UI STRUCTURE
                         Icon(
                             imageVector = Icons.Default.Star,
                             contentDescription = null,
@@ -82,10 +86,17 @@ fun LevelProgressScreen(
                         
                         Spacer(modifier = Modifier.height(16.dp))
                         
+                        // FEATURE 1 — REMOVE "PROGRAMMER"
                         Text(
-                            text = "Level $userLevel Programmer",
-                            fontSize = 24.sp,
+                            text = "Level $userLevel",
+                            fontSize = 30.sp,
                             fontWeight = FontWeight.Bold
+                        )
+
+                        Text(
+                            text = getLevelTitle(userLevel),
+                            fontSize = 16.sp,
+                            color = Color.Gray
                         )
                         
                         Spacer(modifier = Modifier.height(24.dp))

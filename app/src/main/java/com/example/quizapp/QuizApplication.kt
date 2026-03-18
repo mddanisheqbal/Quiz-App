@@ -24,6 +24,13 @@ class QuizApplication : Application() {
     override fun onCreate() {
         super.onCreate()
         
+        // Global Crash Logging
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            Log.e("CRASH_LOG", "Uncaught exception in thread ${thread.name}")
+            Log.e("CRASH_LOG", throwable.stackTraceToString())
+            // In a real app, you might want to restart the app or send to Firebase Crashlytics
+        }
+
         // Initialize Mobile Ads SDK
         MobileAds.initialize(this) {}
         

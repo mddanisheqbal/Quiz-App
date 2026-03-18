@@ -1,7 +1,6 @@
 package com.example.quizapp.presentation.viewmodel
 
 import android.app.Activity
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.quizapp.data.local.BookmarkDao
@@ -10,6 +9,7 @@ import com.example.quizapp.data.local.QuizSessionEntity
 import com.example.quizapp.data.model.*
 import com.example.quizapp.data.repository.CoinsManager
 import com.example.quizapp.data.repository.QuizRepository
+import com.example.quizapp.data.repository.StoreRepository
 import com.example.quizapp.util.*
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -31,6 +31,7 @@ class QuizViewModel @Inject constructor(
     private val bookmarkDao: BookmarkDao,
     private val networkUtils: NetworkUtils,
     private val coinsManager: CoinsManager,
+    private val storeRepository: StoreRepository,
     private val dailyRewardManager: DailyRewardManager,
     private val rewardedAdManager: RewardedAdManager
 ) : ViewModel() {
@@ -110,7 +111,7 @@ class QuizViewModel @Inject constructor(
     private val _isOnline = MutableStateFlow(networkUtils.isNetworkAvailable())
     val isOnline: StateFlow<Boolean> = _isOnline
 
-    // Feature 9: Coins State
+    // Feature 9: Real-time Coins Sync (Single Source of Truth)
     private val _coins = MutableStateFlow(0)
     val coins: StateFlow<Int> = _coins
 
@@ -144,12 +145,23 @@ class QuizViewModel @Inject constructor(
         restoreUserData()
         observeNetwork()
         checkDailyReward()
+        observeCoins()
     }
 
     private fun observeNetwork() {
         viewModelScope.launch {
             networkUtils.observeNetworkStatus.collect {
                 _isOnline.value = it
+            }
+        }
+    }
+
+    private fun observeCoins() {
+        viewModelScope.launch {
+            storeRepository.getUserCoins().collect { resource ->
+                if (resource is Resource.Success) {
+                    _coins.value = resource.data ?: 0
+                }
             }
         }
     }
@@ -164,7 +176,7 @@ class QuizViewModel @Inject constructor(
                 _streakCount.value = user.streak
                 _userLevel.value = user.level
                 _dailyChallengeCompleted.value = user.dailyChallengeCompleted
-                _coins.value = user.coins
+                // _coins is now handled by observeCoins() for real-time sync
                 prefsManager.setTotalXP(user.totalXP)
             }
             
@@ -186,7 +198,7 @@ class QuizViewModel @Inject constructor(
                 if (reward != null) {
                     _dailyRewardAmount.value = reward
                     _showDailyRewardDialog.value = true
-                    refreshCoins()
+                    // Coins update will be picked up by observer
                 }
             }
         }
@@ -197,12 +209,6 @@ class QuizViewModel @Inject constructor(
         _dailyRewardAmount.value = null
     }
 
-    private fun refreshCoins() {
-        viewModelScope.launch {
-            _coins.value = coinsManager.getCoins()
-        }
-    }
-
     fun showRewardedAd(activity: Activity) {
         if (!networkUtils.isNetworkAvailable()) return
         
@@ -211,8 +217,8 @@ class QuizViewModel @Inject constructor(
             onRewardEarned = { amount ->
                 viewModelScope.launch {
                     val rewardCoins = 20 + (Math.random() * 30).toInt()
-                    coinsManager.addCoins(rewardCoins)
-                    refreshCoins()
+                    storeRepository.addCoins(rewardCoins)
+                    // No need to manually refresh, observer will handle it
                 }
             },
             onAdDismissed = {
@@ -228,7 +234,6 @@ class QuizViewModel @Inject constructor(
         if (coins.value >= 10 && !_isHintVisible.value) {
             viewModelScope.launch {
                 if (coinsManager.spendCoins(10)) {
-                    refreshCoins()
                     _isHintVisible.value = true
                 }
             }
@@ -241,7 +246,6 @@ class QuizViewModel @Inject constructor(
         if (coins.value >= 15) {
             viewModelScope.launch {
                 if (coinsManager.spendCoins(15)) {
-                    refreshCoins()
                     nextQuestion()
                 }
             }
@@ -259,7 +263,6 @@ class QuizViewModel @Inject constructor(
         if (coins.value >= 10) {
             viewModelScope.launch {
                 if (coinsManager.spendCoins(10)) {
-                    refreshCoins()
                     val options = currentQuestion.options.toMutableList()
                     val correct = currentQuestion.correctAnswer
                     options.remove(correct)
@@ -295,7 +298,7 @@ class QuizViewModel @Inject constructor(
                 
                 val sessionResource = quizRepository.getQuizSession(userId, chapterId)
                 if (sessionResource is Resource.Success && sessionResource.data != null) {
-                    val session = sessionResource.data!!
+                    val session = sessionResource.data
                     pendingSession = session
                     _resumeMessage.value = "You answered ${session.answers.size} / ${session.totalQuestions} questions"
                     _showResumeDialog.value = true
@@ -522,7 +525,7 @@ class QuizViewModel @Inject constructor(
                     correctAnswerMap[qId].equals(ans, ignoreCase = true) 
                 }
                 
-                val percentage = if (totalQuestionsCount > 0) (correctCount * 100) / totalQuestionsCount else 0
+                val percentage = (correctCount * 100) / totalQuestionsCount
                 val starsEarned = when {
                     percentage >= 90 -> 3
                     percentage >= 60 -> 2
@@ -538,7 +541,7 @@ class QuizViewModel @Inject constructor(
                     bonusCoins += _streakCount.value * 2
                 }
                 
-                coinsManager.addCoins(bonusCoins)
+                storeRepository.addCoins(bonusCoins)
 
                 var totalScore = 0
                 val answersMap = mutableMapOf<String, UserAnswer>()
@@ -599,7 +602,6 @@ class QuizViewModel @Inject constructor(
                         
                         quizRepository.deleteQuizSession(userId, currentChapterId)
                         restoreTopicProgress(userId)
-                        refreshCoins()
                         _quizResult.value = Resource.Success(result)
                     } else {
                         _quizResult.value = Resource.Error(progressResult.message ?: "Failed to save progress")

@@ -1,6 +1,7 @@
 package com.example.quizapp.presentation.screens
 
 import android.util.Patterns
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -17,6 +18,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -49,12 +51,18 @@ fun SignUpScreen(
 
     val authState by authViewModel.authState.collectAsState()
     val focusManager = LocalFocusManager.current
+    val context = LocalContext.current
 
     // Handle auth state
     LaunchedEffect(authState) {
         if (authState is Resource.Success) {
-            onNavigateToHome()
+            Toast.makeText(
+                context, 
+                "Account created! Verification email sent. Please verify before login.", 
+                Toast.LENGTH_LONG
+            ).show()
             authViewModel.resetAuthState()
+            onNavigateToLogin() // Go to login so they can sign in after verifying
         }
     }
 
@@ -291,7 +299,8 @@ fun SignUpScreen(
                         Text(
                             text = errorMessage,
                             color = MaterialTheme.colorScheme.error,
-                            fontSize = 14.sp
+                            fontSize = 14.sp,
+                            modifier = Modifier.fillMaxWidth()
                         )
                         
                         // Also show specifically for email if registered

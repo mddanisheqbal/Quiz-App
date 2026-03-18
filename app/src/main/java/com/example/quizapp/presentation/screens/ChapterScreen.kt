@@ -16,6 +16,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,13 +48,22 @@ fun ChapterScreen(
     val defaultColor = MaterialTheme.colorScheme.primary
     val categoryColor = remember(categoryColorString) {
         try {
-            Color(categoryColorString.toLong())
+            // Ensure hex starts with #
+            val hex = if (categoryColorString.startsWith("#")) categoryColorString else "#$categoryColorString"
+            Color(android.graphics.Color.parseColor(hex))
         } catch (e: Exception) {
             defaultColor
         }
     }
 
-    val contentColor = if (categoryName == "JavaScript" || categoryName == "HTML") Color.Black else Color.White
+    // Dynamic content color based on background luminance
+    val contentColor = remember(categoryColor) {
+        val argb = categoryColor.toArgb()
+        val luminance = 0.2126 * android.graphics.Color.red(argb) + 
+                        0.7152 * android.graphics.Color.green(argb) + 
+                        0.0722 * android.graphics.Color.blue(argb)
+        if (luminance < 128) Color.White else Color.Black
+    }
 
     Scaffold(
         topBar = {
@@ -84,12 +94,12 @@ fun ChapterScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(52.dp),
-                        placeholder = { Text("Search chapters...") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        placeholder = { Text("Search chapters...", color = contentColor.copy(alpha = 0.6f)) },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = contentColor.copy(alpha = 0.6f)) },
                         trailingIcon = {
                             if (searchQuery.isNotEmpty()) {
                                 IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = "Clear")
+                                    Icon(Icons.Default.Clear, contentDescription = "Clear", tint = contentColor.copy(alpha = 0.6f))
                                 }
                             }
                         },
@@ -99,6 +109,8 @@ fun ChapterScreen(
                             disabledContainerColor = MaterialTheme.colorScheme.surface,
                             focusedIndicatorColor = Color.Transparent,
                             unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = MaterialTheme.colorScheme.onSurface,
+                            unfocusedTextColor = MaterialTheme.colorScheme.onSurface
                         ),
                         shape = MaterialTheme.shapes.medium,
                         singleLine = true
@@ -115,7 +127,7 @@ fun ChapterScreen(
         ) {
             when (topicsState) {
                 is Resource.Loading -> {
-                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    CircularProgressIndicator(modifier = Modifier.align(Alignment.Center), color = categoryColor)
                 }
                 is Resource.Success -> {
                     val topics = (topicsState as Resource.Success).data ?: emptyList()
@@ -145,11 +157,8 @@ fun ChapterScreen(
                             modifier = Modifier.fillMaxSize()
                         ) {
                             itemsIndexed(filteredTopics) { index, topic ->
-                                // FEATURE 4 — CHAPTER LIST UI (Stars)
                                 val stars = topicProgress[topic.id] ?: 0
-                                val isCompleted = stars > 0
                                 
-                                // FEATURE 5 — UNLOCK RULE WITH STARS (At least 2 stars to unlock next)
                                 val previousTopicId = topics.getOrNull(index - 1)?.id
                                 val previousStars = if (previousTopicId != null) topicProgress[previousTopicId] ?: 0 else 0
                                 val isUnlocked = index == 0 || previousStars >= 2

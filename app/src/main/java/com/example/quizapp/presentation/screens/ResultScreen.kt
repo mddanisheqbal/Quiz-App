@@ -26,6 +26,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
+import com.example.quizapp.presentation.viewmodel.UserViewModel
 import com.example.quizapp.ui.theme.CorrectGreen
 import com.example.quizapp.ui.theme.GradientEnd
 import com.example.quizapp.ui.theme.GradientStart
@@ -39,7 +40,8 @@ import kotlinx.coroutines.launch
 fun ResultScreen(
     onNavigateToHome: () -> Unit,
     onNavigateToHistory: () -> Unit,
-    quizViewModel: QuizViewModel = hiltViewModel()
+    quizViewModel: QuizViewModel = hiltViewModel(),
+    userViewModel: UserViewModel = hiltViewModel()
 ) {
     val quizResult by quizViewModel.quizResult.collectAsState()
     val xpAwarded by quizViewModel.xpAwardedInThisSession.collectAsState()
@@ -184,7 +186,7 @@ fun ResultScreen(
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clickable { quizViewModel.showRewardedAd(context as Activity) },
+                                .clickable { userViewModel.showRewardedAd(context as Activity) },
                             shape = RoundedCornerShape(16.dp),
                             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
                         ) {
@@ -200,7 +202,7 @@ fun ResultScreen(
                                 Spacer(modifier = Modifier.width(12.dp))
                                 Column {
                                     Text(
-                                        text = "Watch Ad → Earn 20-50 Coins",
+                                        text = "Watch Ad → Earn 20 Coins",
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.titleMedium
                                     )

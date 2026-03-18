@@ -5,6 +5,7 @@ sealed class Screen(val route: String) {
     object Login : Screen("login")
     object SignUp : Screen("signup")
     object Home : Screen("home")
+    object Profile : Screen("profile")
     object Chapter : Screen("chapter/{categoryId}/{categoryName}/{categoryColor}") {
         fun createRoute(categoryId: String, categoryName: String, categoryColor: String) = "chapter/$categoryId/$categoryName/$categoryColor"
     }
@@ -20,6 +21,7 @@ sealed class Screen(val route: String) {
     object Leaderboard : Screen("leaderboard")
     object DailyChallenge : Screen("daily_challenge")
     object Achievements : Screen("achievements")
+    object Store : Screen("store")
     object AdminLogin : Screen("admin_login")
     object AdminDashboard : Screen("admin_dashboard")
     object ManageCategories : Screen("manage_categories")

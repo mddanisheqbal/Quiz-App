@@ -71,6 +71,9 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-auth-ktx")
 
+    // Google Sign-In
+    implementation("com.google.android.gms:play-services-auth:20.7.0")
+
     // Hilt
     implementation("com.google.dagger:hilt-android:2.50")
     kapt("com.google.dagger:hilt-android-compiler:2.50")
@@ -87,6 +90,12 @@ dependencies {
 
     // AdMob
     implementation("com.google.android.gms:play-services-ads:23.0.0")
+
+    // Billing
+    implementation("com.android.billingclient:billing-ktx:6.0.1")
+
+    // Coil for Image Loading
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     testImplementation("junit:junit:4.13.2")
     androidTestImplementation("androidx.test.ext:junit:1.1.5")
