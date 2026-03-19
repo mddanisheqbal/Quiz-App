@@ -39,13 +39,28 @@ object Constants {
         7500    // Level 10
     )
 
-    // Categories
-    const val CATEGORY_JAVA = "Java"
-    const val CATEGORY_PYTHON = "Python"
-    const val CATEGORY_KOTLIN = "Kotlin"
-    const val CATEGORY_CPP = "C++"
-    const val CATEGORY_C = "C"
-    const val CATEGORY_HTML = "HTML"
-    const val CATEGORY_CSS = "CSS"
-    const val CATEGORY_JS = "JavaScript"
+    // Level Rewards (Level to Coins)
+    val LEVEL_REWARDS = mapOf(
+        2 to 50,
+        3 to 100,
+        4 to 150,
+        5 to 200,
+        6 to 300,
+        7 to 400,
+        8 to 500,
+        9 to 700,
+        10 to 1000
+    )
+
+    fun calculateLevel(xp: Int): Int {
+        var level = 1
+        for (i in 1 until LEVEL_THRESHOLDS.size) {
+            if (xp >= LEVEL_THRESHOLDS[i]) {
+                level = i + 1
+            } else {
+                break
+            }
+        }
+        return level
+    }
 }

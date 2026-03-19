@@ -22,5 +22,12 @@ data class User(
     val coins: Int = 0,
     val lastRewardDate: Long = 0L,
     val rewardDay: Int = 1, // 1-7 for cycle
-    val adsDisabledUntil: Long = 0L
+    val adsDisabledUntil: Long = 0L,
+
+    // Smart Redirection
+    val lastCategoryId: String? = null,
+    val lastCategoryName: String? = null,
+    val lastTopicId: String? = null,
+    val lastTopicName: String? = null,
+    val lastCategoryColor: String? = null
 )

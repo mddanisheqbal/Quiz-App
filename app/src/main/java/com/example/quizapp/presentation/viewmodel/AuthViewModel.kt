@@ -8,7 +8,6 @@ import com.example.quizapp.R
 import com.example.quizapp.data.model.User
 import com.example.quizapp.data.repository.AuthRepository
 import com.example.quizapp.util.Resource
-import com.google.android.gms.auth.api.identity.BeginSignInRequest
 import com.google.android.gms.auth.api.identity.Identity
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInClient
@@ -86,20 +85,6 @@ class AuthViewModel @Inject constructor(
         return GoogleSignIn.getClient(context, options)
     }
 
-    // ⭐ One Tap Config to show all accounts and prevent auto-login
-    fun getOneTapSignInRequest(context: Context): BeginSignInRequest {
-        return BeginSignInRequest.builder()
-            .setGoogleIdTokenRequestOptions(
-                BeginSignInRequest.GoogleIdTokenRequestOptions.builder()
-                    .setSupported(true)
-                    .setServerClientId(context.getString(R.string.default_web_client_id))
-                    .setFilterByAuthorizedAccounts(false) // Show all accounts, not just authorized ones
-                    .build()
-            )
-            .setAutoSelectEnabled(false) // Prevent auto-selection of a single account
-            .build()
-    }
-
     fun resendVerificationEmail() {
         viewModelScope.launch {
             _verificationState.value = Resource.Loading()
@@ -132,7 +117,7 @@ class AuthViewModel @Inject constructor(
     fun signOut(context: Context) {
         viewModelScope.launch {
             try {
-                // Sign out from both traditional and One Tap clients
+                // Sign out from Google client
                 getGoogleSignInClient(context).signOut()
                 Identity.getSignInClient(context).signOut()
             } catch (e: Exception) {

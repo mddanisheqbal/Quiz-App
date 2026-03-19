@@ -6,6 +6,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -40,6 +41,9 @@ fun ChapterScreen(
     val topicProgress by quizViewModel.topicProgress.collectAsState()
     var searchQuery by remember { mutableStateOf("") }
     val context = LocalContext.current
+
+    // Use default rememberLazyListState() to ensure it resets to top on back
+    val listState = rememberLazyListState()
 
     LaunchedEffect(categoryId) {
         quizViewModel.loadTopics(categoryId)
@@ -130,6 +134,7 @@ fun ChapterScreen(
                         }
                     } else {
                         LazyColumn(
+                            state = listState,
                             modifier = Modifier.fillMaxSize()
                         ) {
                             itemsIndexed(filteredTopics) { index, topic ->

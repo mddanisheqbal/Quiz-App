@@ -14,6 +14,7 @@ import com.example.quizapp.data.repository.StoreRepository
 import com.example.quizapp.util.*
 import com.google.firebase.auth.FirebaseAuth
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.util.*
@@ -34,7 +35,8 @@ class QuizViewModel @Inject constructor(
     private val coinsManager: CoinsManager,
     private val storeRepository: StoreRepository,
     private val dailyRewardManager: DailyRewardManager,
-    private val rewardedAdManager: RewardedAdManager
+    private val rewardedAdManager: RewardedAdManager,
+    private val streakManager: StreakManager
 ) : ViewModel() {
 
     private val _quizSession = MutableStateFlow<QuizSessionEntity?>(null)
@@ -145,15 +147,27 @@ class QuizViewModel @Inject constructor(
     private var pendingSession: QuizSessionEntity? = null
     private var isSessionInitialized = false
 
-    // Level Up State
-    private val _showLevelUpDialog = MutableStateFlow<Int?>(null)
-    val showLevelUpDialog: StateFlow<Int?> = _showLevelUpDialog
+    // Level Up State (Holds Pair of Level and Reward Coins)
+    private val _showLevelUpDialog = MutableStateFlow<Pair<Int, Int>?>(null)
+    val showLevelUpDialog: StateFlow<Pair<Int, Int>?> = _showLevelUpDialog
+
+    // SCROLL POSITION PERSISTENCE (Only for Categories section on Home)
+    var homeGridScrollIndex = 0
+    var homeGridScrollOffset = 0
 
     init {
         restoreUserData()
         observeNetwork()
         checkDailyReward()
         observeCoins()
+        updateStreak()
+    }
+
+    private fun updateStreak() {
+        viewModelScope.launch {
+            val newStreak = streakManager.updateDailyStreak()
+            _streakCount.value = newStreak
+        }
     }
 
     private fun observeNetwork() {
@@ -182,10 +196,18 @@ class QuizViewModel @Inject constructor(
                 val user = result.data!!
                 _totalXP.value = user.totalXP
                 _streakCount.value = user.streak
-                _userLevel.value = user.level
+                
+                // RECALCULATE LEVEL FROM XP TO ENSURE CONSISTENCY
+                val calculatedLevel = Constants.calculateLevel(user.totalXP)
+                _userLevel.value = calculatedLevel
+                
                 _dailyChallengeCompleted.value = user.dailyChallengeCompleted
-                // _coins is now handled by observeCoins() for real-time sync
                 prefsManager.setTotalXP(user.totalXP)
+                
+                // If the stored level in Firestore is different, update it
+                if (user.level != calculatedLevel) {
+                    quizRepository.updateUserLevel(userId, calculatedLevel)
+                }
             }
             
             restoreTopicProgress(userId)
@@ -282,7 +304,7 @@ class QuizViewModel @Inject constructor(
         }
     }
 
-    fun loadQuestions(categoryId: String, chapterId: String, chapterName: String) {
+    fun loadQuestions(categoryId: String, chapterId: String, chapterName: String, categoryColor: String = "#7B1FA2") {
         viewModelScope.launch {
             isDailyChallenge = false
             isSessionInitialized = false
@@ -302,6 +324,16 @@ class QuizViewModel @Inject constructor(
 
             val userId = FirebaseAuth.getInstance().currentUser?.uid
             if (userId != null) {
+                // SMART REDIRECTION: Save last played topic
+                quizRepository.updateUserLastProgress(
+                    userId = userId,
+                    categoryId = categoryId,
+                    categoryName = chapterName, // Using chapterName as a fallback for category name
+                    topicId = chapterId,
+                    topicName = chapterName,
+                    categoryColor = categoryColor
+                )
+
                 _isPreviouslyCompleted.value = quizRepository.isQuizCompleted(userId, currentQuizId)
                 
                 val sessionResource = quizRepository.getQuizSession(userId, chapterId)
@@ -442,9 +474,9 @@ class QuizViewModel @Inject constructor(
         val question = _questions.value.find { it.id == questionId } ?: return
         val isCorrect = userAnswer.equals(question.correctAnswer, true)
         
-        // XP SYSTEM: AWARD EXACTLY 3 XP PER CORRECT ANSWER
+        // XP SYSTEM: AWARD XP PER CORRECT ANSWER
         if (isCorrect && !_isPreviouslyCompleted.value) {
-            val earnedXp = 3 
+            val earnedXp = Constants.XP_PER_CORRECT_ANSWER
             addXP(earnedXp)
             
             // Track session XP for display in ResultScreen
@@ -570,7 +602,7 @@ class QuizViewModel @Inject constructor(
                     val ua = session.answers[q.id].orEmpty()
                     val isCorrect = ua.equals(q.correctAnswer, true)
                     if (isCorrect) {
-                        totalScore += 3 // Align score with XP: 3 points per correct answer
+                        totalScore += Constants.XP_PER_CORRECT_ANSWER
                     }
                     answersMap[index.toString()] = UserAnswer(q.id, q.questionText, ua, q.correctAnswer, isCorrect, 0)
                 }
@@ -588,7 +620,7 @@ class QuizViewModel @Inject constructor(
                     wrongAnswers = totalQuestionsCount - correctCount,
                     skippedAnswers = 0,
                     totalScore = totalScore,
-                    maxScore = totalQuestionsCount * 3,
+                    maxScore = totalQuestionsCount * Constants.XP_PER_CORRECT_ANSWER,
                     percentage = percentage.toFloat(),
                     timeTaken = timeTaken,
                     answers = answersMap,
@@ -650,12 +682,20 @@ class QuizViewModel @Inject constructor(
         _totalXP.value = updatedXP
         
         // AUTO LEVEL UP LOGIC
-        val newLevel = calculateLevel(updatedXP)
+        val newLevel = Constants.calculateLevel(updatedXP)
         val oldLevel = _userLevel.value
         
         if (newLevel > oldLevel) {
             _userLevel.value = newLevel
-            _showLevelUpDialog.value = newLevel
+            val rewardCoins = Constants.LEVEL_REWARDS[newLevel] ?: 0
+            _showLevelUpDialog.value = newLevel to rewardCoins
+            
+            // AWARD COINS
+            if (rewardCoins > 0) {
+                viewModelScope.launch {
+                    storeRepository.addCoins(rewardCoins)
+                }
+            }
         }
         
         viewModelScope.launch { 
@@ -670,19 +710,6 @@ class QuizViewModel @Inject constructor(
         }
     }
 
-    private fun calculateLevel(xp: Int): Int {
-        val thresholds = Constants.LEVEL_THRESHOLDS
-        var level = 1
-        for (i in 1 until thresholds.size) {
-            if (xp >= thresholds[i]) {
-                level = i + 1
-            } else {
-                break
-            }
-        }
-        return level
-    }
-
     fun dismissLevelUpDialog() {
         _showLevelUpDialog.value = null
     }
@@ -693,15 +720,28 @@ class QuizViewModel @Inject constructor(
         }
     }
 
+    private var categoriesJob: Job? = null
     fun loadCategories() {
-        viewModelScope.launch {
-            quizRepository.getCategoriesFlow().collect { _categories.value = it }
+        if (categoriesJob?.isActive == true) return
+        
+        categoriesJob = viewModelScope.launch {
+            quizRepository.getCategoriesFlow().collect { 
+                _categories.value = it 
+            }
         }
     }
 
+    private var topicsJob: Job? = null
+    private var lastLoadedCategoryId: String? = null
     fun loadTopics(categoryId: String) {
-        viewModelScope.launch {
-            quizRepository.getTopicsFlow(categoryId).collect { _topics.value = it }
+        if (lastLoadedCategoryId == categoryId && topicsJob?.isActive == true) return
+        
+        lastLoadedCategoryId = categoryId
+        topicsJob?.cancel()
+        topicsJob = viewModelScope.launch {
+            quizRepository.getTopicsFlow(categoryId).collect { 
+                _topics.value = it 
+            }
         }
     }
 
@@ -714,16 +754,20 @@ class QuizViewModel @Inject constructor(
         }
     }
 
+    private var leaderboardJob: Job? = null
     fun loadLeaderboard() {
-        viewModelScope.launch {
+        if (leaderboardJob?.isActive == true) return
+        leaderboardJob = viewModelScope.launch {
             quizRepository.getLeaderboardFlow().collect {
                 _leaderboard.value = it
             }
         }
     }
 
+    private var monthlyLeaderboardJob: Job? = null
     fun loadMonthlyLeaderboard() {
-        viewModelScope.launch {
+        if (monthlyLeaderboardJob?.isActive == true) return
+        monthlyLeaderboardJob = viewModelScope.launch {
             quizRepository.getMonthlyLeaderboardFlow().collect {
                 _monthlyLeaderboard.value = it
             }

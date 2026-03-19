@@ -5,7 +5,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.GenericShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -47,6 +49,8 @@ fun LeaderboardScreen(
     val leaderboardState = quizViewModel.leaderboard.collectAsState()
     val monthlyLeaderboardState = quizViewModel.monthlyLeaderboard.collectAsState()
     val currentUserState by userViewModel.user.collectAsState()
+
+    val listState = rememberLazyListState()
 
     LaunchedEffect(selectedTab) {
         if (selectedTab == 0) quizViewModel.loadLeaderboard()
@@ -109,7 +113,7 @@ fun LeaderboardScreen(
                 }
             }
         },
-        containerColor = Color(0xFFF5F5F5)
+        containerColor = MaterialTheme.colorScheme.background
     ) { paddingValues ->
         val currentState = if (selectedTab == 0) leaderboardState.value else monthlyLeaderboardState.value
 
@@ -130,7 +134,8 @@ fun LeaderboardScreen(
                         LeaderboardContent(
                             users = users,
                             currentUser = currentUserState,
-                            isMonthly = selectedTab == 1
+                            isMonthly = selectedTab == 1,
+                            listState = listState
                         )
                     }
                 }
@@ -157,23 +162,29 @@ fun EmptyLeaderboard() {
             imageVector = Icons.Default.EmojiEvents,
             contentDescription = null,
             modifier = Modifier.size(80.dp),
-            tint = Color.Gray.copy(alpha = 0.3f)
+            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
         )
         Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "No rankings yet",
             style = MaterialTheme.typography.headlineSmall,
-            color = Color.Gray
+            color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
 }
 
 @Composable
-fun LeaderboardContent(users: List<User>, currentUser: User?, isMonthly: Boolean) {
+fun LeaderboardContent(
+    users: List<User>, 
+    currentUser: User?, 
+    isMonthly: Boolean,
+    listState: LazyListState = rememberLazyListState()
+) {
     val top3 = users.take(3)
     val rest = users.drop(3)
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -243,18 +254,17 @@ fun RankBadge(rank: Int) {
         1 -> Color(0xFFFFD740) to Color.Black   // Premium Gold
         2 -> Color(0xFFE1F5FE) to Color.Black   // Premium Silver
         3 -> Color(0xFFFFCCBC) to Color.Black   // Premium Bronze
-        else -> Color(0xFFF5F5F5) to Color.DarkGray
+        else -> MaterialTheme.colorScheme.surfaceVariant to MaterialTheme.colorScheme.onSurfaceVariant
     }
 
     Box(
         contentAlignment = Alignment.Center,
         modifier = Modifier
             .size(28.dp)
-            // FIX: Using CircleShape for shadow instead of JaggedBadgeShape to fix ANR
             .shadow(if (rank <= 3) 4.dp else 0.dp, CircleShape)
             .clip(JaggedBadgeShape)
             .background(bgColor)
-            .border(1.dp, Color.White, JaggedBadgeShape)
+            .border(1.dp, Color.White.copy(alpha = 0.5f), JaggedBadgeShape)
     ) {
         Text(
             text = rank.toString(),
@@ -376,18 +386,27 @@ fun PodiumUser(user: User, rank: Int, size: androidx.compose.ui.unit.Dp, color: 
                 }
             }
             
-            // Updated positioning in PodiumUser
             Box(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .offset(y = 12.dp) // Sits perfectly at the bottom edge
+                    .offset(y = 12.dp)
             ) {
                 RankMedal(rank = rank)
             }
         }
         Spacer(modifier = Modifier.height(24.dp))
-        Text(displayName, fontWeight = FontWeight.Bold, fontSize = 14.sp)
-        Text("${if (isMonthly) user.monthlyXP else user.totalXP} XP", color = Color(0xFF7B1FA2), fontWeight = FontWeight.ExtraBold, fontSize = 12.sp)
+        Text(
+            text = displayName, 
+            fontWeight = FontWeight.Bold, 
+            fontSize = 14.sp,
+            color = MaterialTheme.colorScheme.onBackground
+        )
+        Text(
+            text = "${if (isMonthly) user.monthlyXP else user.totalXP} XP", 
+            color = Color(0xFF9C27B0), 
+            fontWeight = FontWeight.ExtraBold, 
+            fontSize = 12.sp
+        )
     }
 }
 
@@ -404,7 +423,9 @@ fun LeaderboardItem(rank: Int, user: User, isCurrentUser: Boolean, isMonthly: Bo
                 RoundedCornerShape(16.dp)
             ),
         shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.cardColors(containerColor = Color.White),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
         elevation = CardDefaults.cardElevation(2.dp)
     ) {
         Row(
@@ -439,13 +460,14 @@ fun LeaderboardItem(rank: Int, user: User, isCurrentUser: Boolean, isMonthly: Bo
             Text(
                 text = if (isCurrentUser) "$displayName (You)" else displayName,
                 fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.onSurface,
                 modifier = Modifier.weight(1f)
             )
             
             Text(
                 text = "${if (isMonthly) user.monthlyXP else user.totalXP} XP",
                 fontWeight = FontWeight.ExtraBold,
-                color = Color(0xFF7B1FA2)
+                color = Color(0xFF9C27B0)
             )
         }
     }

@@ -84,14 +84,19 @@ fun NavGraph(
                     navController.getBackStackEntry("main_flow")
                 }
                 val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                val quizViewModel: QuizViewModel = hiltViewModel(parentEntry)
                 
                 MainDrawerScreen(navController = navController) {
                     HomeScreen(
                         userViewModel = userViewModel,
+                        quizViewModel = quizViewModel,
                         onNavigateToTopic = { categoryId, categoryName, categoryColor ->
                             // Strip # for URL safety
                             val safeColor = categoryColor.replace("#", "")
                             navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName, safeColor))
+                        },
+                        onNavigateToQuiz = { categoryId, topicId, topicName ->
+                            navController.navigate(Screen.Quiz.createRoute(categoryId, topicId, topicName))
                         },
                         onNavigateToHistory = { navController.navigate(Screen.History.route) },
                         onNavigateToLevelProgress = { navController.navigate(Screen.LevelProgress.route) },
@@ -134,6 +139,11 @@ fun NavGraph(
                     navArgument("categoryColor") { type = NavType.StringType }
                 )
             ) { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val quizViewModel: QuizViewModel = hiltViewModel(parentEntry)
+                
                 val categoryId = backStackEntry.arguments?.getString("categoryId") ?: ""
                 val categoryName = backStackEntry.arguments?.getString("categoryName") ?: ""
                 val categoryColor = backStackEntry.arguments?.getString("categoryColor") ?: ""
@@ -142,6 +152,7 @@ fun NavGraph(
                     categoryId = categoryId,
                     categoryName = categoryName,
                     categoryColorString = categoryColor,
+                    quizViewModel = quizViewModel,
                     onNavigateToQuiz = { catId, topicId, topicName ->
                         navController.navigate(Screen.Quiz.createRoute(catId, topicId, topicName))
                     },
@@ -230,12 +241,28 @@ fun NavGraph(
                 )
             }
 
-            composable(Screen.StreakDetails.route) {
-                StreakScreen(onNavigateBack = { navController.popBackStack() })
+            composable(Screen.StreakDetails.route) { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                StreakScreen(
+                    userViewModel = userViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
 
-            composable(Screen.Leaderboard.route) {
-                LeaderboardScreen(onNavigateBack = { navController.popBackStack() })
+            composable(Screen.Leaderboard.route) { backStackEntry ->
+                val parentEntry = remember(backStackEntry) {
+                    navController.getBackStackEntry("main_flow")
+                }
+                val quizViewModel: QuizViewModel = hiltViewModel(parentEntry)
+                val userViewModel: UserViewModel = hiltViewModel(parentEntry)
+                LeaderboardScreen(
+                    quizViewModel = quizViewModel,
+                    userViewModel = userViewModel,
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.DailyChallenge.route) {

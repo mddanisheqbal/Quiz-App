@@ -512,4 +512,31 @@ class QuizRepository @Inject constructor(
             }
         awaitClose { subscription.remove() }
     }
+
+    /**
+     * Update user's last played progress for smart redirection
+     */
+    suspend fun updateUserLastProgress(
+        userId: String,
+        categoryId: String,
+        categoryName: String,
+        topicId: String,
+        topicName: String,
+        categoryColor: String
+    ): Resource<Unit> {
+        return try {
+            val updates = mapOf(
+                "lastCategoryId" to categoryId,
+                "lastCategoryName" to categoryName,
+                "lastTopicId" to topicId,
+                "lastTopicName" to topicName,
+                "lastCategoryColor" to categoryColor,
+                "lastActiveDate" to System.currentTimeMillis()
+            )
+            usersCollection.document(userId).update(updates).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to update last progress")
+        }
+    }
 }

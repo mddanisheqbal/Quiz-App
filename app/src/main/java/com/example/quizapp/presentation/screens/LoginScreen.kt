@@ -266,7 +266,12 @@ fun LoginScreen(
 
                 // Google Button
                 PremiumGoogleButton(
-                    onClick = { launcher.launch(googleClient.signInIntent) },
+                    onClick = {
+                        // FORCE ACCOUNT PICKER EVERY TIME
+                        googleClient.signOut().addOnCompleteListener {
+                            launcher.launch(googleClient.signInIntent)
+                        }
+                    },
                     isLoading = authState is Resource.Loading && email.isEmpty()
                 )
 

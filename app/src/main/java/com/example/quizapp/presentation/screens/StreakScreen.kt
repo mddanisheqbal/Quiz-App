@@ -226,19 +226,8 @@ fun StreakScreen(
                     fontSize = 14.sp
                 )
             }
-
-            // FEATURE 7 — ADD CTA BUTTON
+            
             item {
-                Button(
-                    onClick = onPlayQuiz,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7B1FA2))
-                ) {
-                    Text("Play Quiz Now", fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                }
                 Spacer(modifier = Modifier.height(20.dp))
             }
         }

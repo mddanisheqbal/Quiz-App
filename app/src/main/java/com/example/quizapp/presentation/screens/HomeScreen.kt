@@ -2,11 +2,9 @@ package com.example.quizapp.presentation.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.GridItemSpan
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.lazy.grid.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -29,6 +27,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.example.quizapp.data.model.Category
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
 import com.example.quizapp.presentation.viewmodel.UserViewModel
+import com.example.quizapp.util.Constants
 import com.example.quizapp.util.Resource
 import kotlinx.coroutines.launch
 
@@ -89,6 +88,7 @@ fun HomeScreen(
     userViewModel: UserViewModel,
     quizViewModel: QuizViewModel = hiltViewModel(),
     onNavigateToTopic: (String, String, String) -> Unit,
+    onNavigateToQuiz: (String, String, String) -> Unit = { _, _, _ -> },
     onNavigateToStreakDetails: () -> Unit,
     onNavigateToStore: () -> Unit,
     onNavigateToProfile: () -> Unit,
@@ -103,6 +103,22 @@ fun HomeScreen(
     val drawerState = LocalDrawerState.current
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
+    val isDark = isSystemInDarkTheme()
+
+    // RESTORE SCROLL POSITION FROM VIEWMODEL
+    val gridState = rememberLazyGridState(
+        initialFirstVisibleItemIndex = quizViewModel.homeGridScrollIndex,
+        initialFirstVisibleItemScrollOffset = quizViewModel.homeGridScrollOffset
+    )
+
+    // SAVE SCROLL POSITION ON CHANGE
+    LaunchedEffect(gridState) {
+        snapshotFlow { gridState.firstVisibleItemIndex to gridState.firstVisibleItemScrollOffset }
+            .collect { (index, offset) ->
+                quizViewModel.homeGridScrollIndex = index
+                quizViewModel.homeGridScrollOffset = offset
+            }
+    }
 
     LaunchedEffect(Unit) {
         quizViewModel.loadCategories()
@@ -112,7 +128,7 @@ fun HomeScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF5F5F5))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         Scaffold(
             containerColor = Color.Transparent,
@@ -177,6 +193,7 @@ fun HomeScreen(
             }
         ) { paddingValues ->
             LazyVerticalGrid(
+                state = gridState,
                 columns = GridCells.Fixed(2),
                 modifier = Modifier
                     .fillMaxSize()
@@ -188,6 +205,7 @@ fun HomeScreen(
                 // FEATURE 3 — CARDS SECTION (Vertical Stack)
                 item(span = { GridItemSpan(2) }) {
                     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        
                         // 1. LEVEL PROGRESS CARD
                         Card(
                             modifier = Modifier
@@ -207,6 +225,12 @@ fun HomeScreen(
                                     .padding(16.dp)
                             ) {
                                 Column {
+                                    val currentLevel = userState?.level ?: 1
+                                    val thresholds = Constants.LEVEL_THRESHOLDS
+                                    val currentLevelXP = thresholds.getOrElse(currentLevel - 1) { 0 }
+                                    val nextLevelXP = thresholds.getOrElse(currentLevel) { thresholds.last() }
+                                    val totalXP = userState?.totalXP ?: 0
+
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(
                                             imageVector = Icons.Default.Star,
@@ -217,20 +241,20 @@ fun HomeScreen(
                                         Spacer(modifier = Modifier.width(8.dp))
                                         Column {
                                             Text(
-                                                text = "Level ${userState?.level ?: 1}",
+                                                text = "Level $currentLevel",
                                                 color = Color.White,
                                                 fontWeight = FontWeight.Bold,
                                                 fontSize = 16.sp
                                             )
                                             Text(
-                                                text = getLevelTitle(userState?.level ?: 1),
+                                                text = getLevelTitle(currentLevel),
                                                 color = Color.White.copy(alpha = 0.8f),
                                                 fontSize = 14.sp
                                             )
                                         }
                                         Spacer(modifier = Modifier.weight(1f))
                                         Text(
-                                            text = "${userState?.totalXP ?: 0} / ${(userState?.level ?: 1) * 300} XP",
+                                            text = "$totalXP / $nextLevelXP XP",
                                             color = Color.White.copy(alpha = 0.7f),
                                             fontSize = 12.sp
                                         )
@@ -238,11 +262,12 @@ fun HomeScreen(
                                     
                                     Spacer(modifier = Modifier.height(12.dp))
                                     
-                                    val currentLevel = userState?.level ?: 1
-                                    val xpProgress = (userState?.totalXP ?: 0).toFloat() / (currentLevel * 300).toFloat()
+                                    val progress = if (nextLevelXP > currentLevelXP) {
+                                        (totalXP - currentLevelXP).toFloat() / (nextLevelXP - currentLevelXP).toFloat()
+                                    } else 1f
                                     
                                     LinearProgressIndicator(
-                                        progress = xpProgress.coerceIn(0f, 1f),
+                                        progress = progress.coerceIn(0f, 1f),
                                         modifier = Modifier
                                             .fillMaxWidth()
                                             .height(8.dp)
@@ -294,19 +319,21 @@ fun HomeScreen(
                                 }
                                 .shadow(2.dp, RoundedCornerShape(20.dp)),
                             shape = RoundedCornerShape(20.dp),
-                            colors = CardDefaults.cardColors(containerColor = Color(0xFFF8D7DA))
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (isDark) Color(0xFF3B2527) else Color(0xFFF8D7DA)
+                            )
                         ) {
                             Row(
                                 modifier = Modifier.padding(16.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.PlayCircle, contentDescription = null, tint = Color(0xFFC62828), modifier = Modifier.size(40.dp))
+                                Icon(Icons.Default.PlayCircle, contentDescription = null, tint = if (isDark) Color(0xFFE57373) else Color(0xFFC62828), modifier = Modifier.size(40.dp))
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column(modifier = Modifier.weight(1f)) {
-                                    Text("Earn Free Coins", color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    Text("Watch a quick ad to get 20 coins!", color = Color.Black.copy(alpha = 0.7f), fontSize = 12.sp)
+                                    Text("Earn Free Coins", color = if (isDark) Color.White else Color.Black, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                    Text("Watch a quick ad to get 20 coins!", color = if (isDark) Color.White.copy(alpha = 0.7f) else Color.Black.copy(alpha = 0.7f), fontSize = 12.sp)
                                 }
-                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Black.copy(alpha = 0.5f))
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = if (isDark) Color.White.copy(alpha = 0.5f) else Color.Black.copy(alpha = 0.5f))
                             }
                         }
 
@@ -338,7 +365,7 @@ fun HomeScreen(
                 item(span = { GridItemSpan(2) }) {
                     Text(
                         text = "Categories",
-                        color = Color.Black,
+                        color = MaterialTheme.colorScheme.onBackground,
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Bold,
                         modifier = Modifier.padding(top = 8.dp)
