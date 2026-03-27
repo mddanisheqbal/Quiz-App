@@ -354,7 +354,7 @@ fun HomeScreen(
                                 Spacer(modifier = Modifier.width(16.dp))
                                 Column {
                                     Text("Daily Challenge 🎯", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
-                                    Text("Complete today's challenge (+25 XP)", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
+                                    Text("Complete today's challenges", color = Color.White.copy(alpha = 0.8f), fontSize = 12.sp)
                                 }
                             }
                         }

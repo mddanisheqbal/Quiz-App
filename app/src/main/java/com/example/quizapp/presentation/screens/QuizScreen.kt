@@ -37,6 +37,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.example.quizapp.data.model.Achievement
 import com.example.quizapp.data.model.Question
 import com.example.quizapp.data.model.QuestionType
 import com.example.quizapp.presentation.viewmodel.AnswerState
@@ -87,9 +88,12 @@ fun QuizScreen(
 
     var showExitDialog by remember { mutableStateOf(false) }
     var showSubmitDialog by remember { mutableStateOf(false) }
+    
+    // Achievement Unlock logic
+    var unlockedAchievement by remember { mutableStateOf<Achievement?>(null) }
 
     // 🔥 Ultra Premium: Background Blur logic
-    val shouldBlur = showTimeUpDialog || showExitDialog || showSubmitDialog || showResumeDialog
+    val shouldBlur = showTimeUpDialog || showExitDialog || showSubmitDialog || showResumeDialog || unlockedAchievement != null
 
     LaunchedEffect(categoryId, topicId, topicName) {
         quizViewModel.loadQuestions(categoryId, topicId, topicName)
@@ -99,6 +103,13 @@ fun QuizScreen(
     LaunchedEffect(Unit) {
         quizViewModel.toastMessage.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    // Observe Achievement Events
+    LaunchedEffect(Unit) {
+        quizViewModel.achievementEvent.collect { achievement ->
+            unlockedAchievement = achievement
         }
     }
 
@@ -280,25 +291,28 @@ fun QuizScreen(
                         val currentQuestion = questions.getOrNull(currentIndex)
 
                         if (currentQuestion != null) {
-                            QuestionCard(
-                                question = currentQuestion,
-                                questionNumber = currentIndex + 1,
-                                selectedAnswer = selectedAnswer,
-                                showResult = showResult,
-                                isTimeUp = isTimeUp,
-                                answerState = answerStates[currentQuestion.id] ?: AnswerState.UNANSWERED,
-                                isBookmarked = isBookmarked,
-                                isHintVisible = isHintVisible,
-                                removedOptions = removedOptions,
-                                onAnswerSelected = { answer ->
-                                    haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                    quizViewModel.onAnswerSelected(answer)
-                                },
-                                onBookmarkToggle = {
-                                    haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                                    quizViewModel.toggleBookmark(currentQuestion)
-                                }
-                            )
+                            // 🔥 FIX: Use key(currentQuestion.id) to reset internal states (like animations) when switching questions
+                            key(currentQuestion.id) {
+                                QuestionCard(
+                                    question = currentQuestion,
+                                    questionNumber = currentIndex + 1,
+                                    selectedAnswer = selectedAnswer,
+                                    showResult = showResult,
+                                    isTimeUp = isTimeUp,
+                                    answerState = answerStates[currentQuestion.id] ?: AnswerState.UNANSWERED,
+                                    isBookmarked = isBookmarked,
+                                    isHintVisible = isHintVisible,
+                                    removedOptions = removedOptions,
+                                    onAnswerSelected = { answer ->
+                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        quizViewModel.onAnswerSelected(answer)
+                                    },
+                                    onBookmarkToggle = {
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        quizViewModel.toggleBookmark(currentQuestion)
+                                    }
+                                )
+                            }
                         }
 
                         Spacer(Modifier.height(24.dp))
@@ -400,6 +414,14 @@ fun QuizScreen(
                     }) { Text("Yes") }
                 },
                 dismissButton = { TextButton(onClick = { showSubmitDialog = false }) { Text("No") } }
+            )
+        }
+        
+        // Achievement Unlock Dialog
+        unlockedAchievement?.let { achievement ->
+            AchievementUnlockDialog(
+                achievement = achievement,
+                onDismiss = { unlockedAchievement = null }
             )
         }
     }
@@ -729,15 +751,19 @@ fun QuestionCard(
                         if (!removedOptions.contains(option)) {
                             val isCorrectOption = option.equals(question.correctAnswer, ignoreCase = true)
                             val optionLabel = ('A' + index).toString()
-                            AnswerOption(
-                                text = option,
-                                optionLabel = optionLabel,
-                                isSelected = selectedAnswer == option,
-                                isCorrect = isCorrectOption,
-                                isAnswered = isAnswered,
-                                showResult = showResult,
-                                onClick = { if (!isAnswered && !showResult) onAnswerSelected(option) }
-                            )
+                            
+                            // 🔥 FIX: Use key(option) to ensure state is fresh for each option
+                            key(option) {
+                                AnswerOption(
+                                    text = option,
+                                    optionLabel = optionLabel,
+                                    isSelected = selectedAnswer == option,
+                                    isCorrect = isCorrectOption,
+                                    isAnswered = isAnswered,
+                                    showResult = showResult,
+                                    onClick = { if (!isAnswered && !showResult) onAnswerSelected(option) }
+                                )
+                            }
                             Spacer(Modifier.height(14.dp))
                         }
                     }

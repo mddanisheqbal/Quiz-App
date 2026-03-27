@@ -53,6 +53,9 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
 
+    // Konfetti
+    implementation("nl.dionsegijn:konfetti-compose:2.0.4")
+
     // Splash Screen
     implementation("androidx.core:core-splashscreen:1.0.1")
 

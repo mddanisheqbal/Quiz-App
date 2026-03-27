@@ -38,6 +38,7 @@ class QuizViewModel @Inject constructor(
     private val coinsManager: CoinsManager,
     private val bookmarkDao: BookmarkDao,
     private val dailyChallengeManager: DailyChallengeManager,
+    private val achievementManager: AchievementManager,
     private val firestore: FirebaseFirestore
 ) : ViewModel() {
 
@@ -86,8 +87,8 @@ class QuizViewModel @Inject constructor(
     private val _stars = MutableStateFlow(0)
     val stars: StateFlow<Int> = _stars
 
-    private val _achievements = MutableStateFlow<Resource<List<Achievement>>>(Resource.Loading())
-    val achievements: StateFlow<Resource<List<Achievement>>> = _achievements
+    private val _userAchievements = MutableStateFlow<Resource<List<UserAchievement>>>(Resource.Loading())
+    val userAchievements: StateFlow<Resource<List<UserAchievement>>> = _userAchievements
 
     private val _totalXP = MutableStateFlow(prefsManager.getTotalXP())
     val totalXP: StateFlow<Int> = _totalXP
@@ -149,6 +150,8 @@ class QuizViewModel @Inject constructor(
     private var isSubmitting = false
     private var timerJob: Job? = null
 
+    val achievementEvent = achievementManager.achievementEvent
+
     val bookmarkedQuestions: StateFlow<List<BookmarkEntity>> = bookmarkDao.getAllBookmarks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -199,9 +202,9 @@ class QuizViewModel @Inject constructor(
     fun loadAchievements() {
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
-            _achievements.value = Resource.Loading()
+            _userAchievements.value = Resource.Loading()
             quizRepository.getAchievementsFlow(userId).collect {
-                _achievements.value = it
+                _userAchievements.value = it
             }
         }
     }
@@ -235,6 +238,16 @@ class QuizViewModel @Inject constructor(
         viewModelScope.launch {
             val newStreak = streakManager.updateDailyStreak()
             _streakCount.value = newStreak
+            
+            // Trigger streak achievement
+            val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
+            val userResult = quizRepository.getUserProfile(userId)
+            if (userResult is Resource.Success) {
+                val updatedUser = achievementManager.updateProgress(userResult.data!!, "streak", newStreak)
+                if (updatedUser != userResult.data) {
+                    quizRepository.updateUserAchievements(userId, updatedUser.achievements)
+                }
+            }
         }
     }
 
@@ -278,6 +291,12 @@ class QuizViewModel @Inject constructor(
                 if (updatedUser.level != calculatedLevel) {
                     quizRepository.updateUserLevel(userId, calculatedLevel)
                 }
+
+                // Trigger progress achievement (level)
+                val levelUser = achievementManager.updateProgress(updatedUser, "progress", calculatedLevel)
+                if (levelUser != updatedUser) {
+                    quizRepository.updateUserAchievements(userId, levelUser.achievements)
+                }
             }
             
             restoreTopicProgress(userId)
@@ -317,6 +336,16 @@ class QuizViewModel @Inject constructor(
                 viewModelScope.launch {
                     val rewardCoins = 20 + (Math.random() * 30).toInt()
                     storeRepository.addCoins(rewardCoins)
+                    
+                    // Trigger economy achievement
+                    val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
+                    val userResult = quizRepository.getUserProfile(userId)
+                    if (userResult is Resource.Success) {
+                        val updatedUser = achievementManager.updateProgress(userResult.data!!, "economy", rewardCoins)
+                        if (updatedUser != userResult.data) {
+                            quizRepository.updateUserAchievements(userId, updatedUser.achievements)
+                        }
+                    }
                 }
             },
             onAdDismissed = {
@@ -736,23 +765,48 @@ class QuizViewModel @Inject constructor(
             _quizResult.value = Resource.Success(result)
             _xpAwardedInThisSession.value = xpEarned
             
-            checkChallengeCompletion(correctCount, totalQuestions, scorePercentage)
-            checkAchievements(correctCount, totalQuestions)
+            val timeTaken = (System.currentTimeMillis() - quizStartTime) / 1000
+            
+            checkChallengeCompletion(correctCount, totalQuestions, scorePercentage, timeTaken)
             
             val userId = FirebaseAuth.getInstance().currentUser?.uid
             if (userId != null) {
                 quizRepository.saveQuizResult(userId, result)
                 storeRepository.addCoins(coinsEarned)
                 quizRepository.deleteQuizSession(userId, currentChapterId)
+                
+                // Achievement Progress Tracking
+                val userResult = quizRepository.getUserProfile(userId)
+                if (userResult is Resource.Success) {
+                    var user = userResult.data!!
+                    
+                    // 🎯 Quiz count
+                    user = achievementManager.updateProgress(user, "quiz", 1)
+                    
+                    // 🏆 Perfect Score
+                    if (correctCount == totalQuestions) {
+                        user = achievementManager.updateProgress(user, "skill", 1)
+                    }
+                    
+                    // ⚡ Speed Master
+                    if (timeTaken <= 60 && totalQuestions >= 5) {
+                        user = achievementManager.updateProgress(user, "skill", 1)
+                    }
+                    
+                    // 💰 Economy
+                    user = achievementManager.updateProgress(user, "economy", coinsEarned)
+                    
+                    // Sync to Firestore
+                    quizRepository.updateUserAchievements(userId, user.achievements)
+                }
             }
         }
     }
 
-    private suspend fun checkChallengeCompletion(score: Int, total: Int, percentage: Int) {
+    private suspend fun checkChallengeCompletion(score: Int, total: Int, percentage: Int, timeTaken: Long) {
         if (isDailyChallenge && currentChapterId == "daily" && total >= 10) {
             dailyChallengeManager.completeChallenge("daily", 25, 10)
         }
-        val timeTaken = (System.currentTimeMillis() - quizStartTime) / 1000
         if (isDailyChallenge && currentChapterId == "speed" && timeTaken <= 60) {
             dailyChallengeManager.completeChallenge("speed", 30, 15)
         }
@@ -761,41 +815,6 @@ class QuizViewModel @Inject constructor(
         }
         if (!isDailyChallenge) {
             dailyChallengeManager.completeChallenge("category", 20, 10)
-        }
-    }
-
-    private fun checkAchievements(score: Int, total: Int) {
-        if (score == total && total >= 5) {
-            unlockAchievement("perfect_score")
-        }
-        if (_streakCount.value >= 7) {
-            unlockAchievement("7_day_streak")
-        }
-        if (_totalXP.value + (score * 10) >= 500) {
-            unlockAchievement("xp_500")
-        }
-    }
-
-    fun unlockAchievement(id: String) {
-        val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
-        viewModelScope.launch {
-            try {
-                val achievementRef = firestore.collection("users").document(userId)
-                    .collection("achievements").document(id)
-                
-                val doc = achievementRef.get().await()
-                if (!doc.exists()) {
-                    val achievementData = mapOf(
-                        "id" to id,
-                        "unlocked" to true,
-                        "unlockedAt" to System.currentTimeMillis()
-                    )
-                    achievementRef.set(achievementData).await()
-                    Log.d("ACHIEVEMENT", "🏆 Achievement Unlocked: $id")
-                }
-            } catch (e: Exception) {
-                Log.e("ACHIEVEMENT", "Failed to unlock achievement", e)
-            }
         }
     }
 

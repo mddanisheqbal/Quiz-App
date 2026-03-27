@@ -27,5 +27,7 @@ data class User(
     val lastCategoryName: String? = null,
     val lastTopicId: String? = null,
     val lastTopicName: String? = null,
-    val lastCategoryColor: String? = null
+    val lastCategoryColor: String? = null,
+
+    val achievements: List<UserAchievement> = emptyList()
 )

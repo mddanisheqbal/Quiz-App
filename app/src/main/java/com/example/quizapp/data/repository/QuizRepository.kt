@@ -536,20 +536,29 @@ class QuizRepository @Inject constructor(
     /**
      * Real-time achievements stream
      */
-    fun getAchievementsFlow(userId: String): Flow<Resource<List<Achievement>>> = callbackFlow {
+    fun getAchievementsFlow(userId: String): Flow<Resource<List<UserAchievement>>> = callbackFlow {
         trySend(Resource.Loading())
-        val subscription = usersCollection.document(userId).collection("achievements")
+        val subscription = usersCollection.document(userId)
             .addSnapshotListener { snapshot, error ->
                 if (error != null) {
                     trySend(Resource.Error(error.message ?: "Stream error"))
                     return@addSnapshotListener
                 }
-                if (snapshot != null) {
-                    val achievements = snapshot.toObjects(Achievement::class.java)
-                    trySend(Resource.Success(achievements))
+                if (snapshot != null && snapshot.exists()) {
+                    val user = snapshot.toObject(User::class.java)
+                    trySend(Resource.Success(user?.achievements ?: emptyList()))
                 }
             }
         awaitClose { subscription.remove() }
+    }
+
+    suspend fun updateUserAchievements(userId: String, achievements: List<UserAchievement>): Resource<Unit> {
+        return try {
+            usersCollection.document(userId).update("achievements", achievements).await()
+            Resource.Success(Unit)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to update achievements")
+        }
     }
 
     /**
