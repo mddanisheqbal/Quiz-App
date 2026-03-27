@@ -143,6 +143,9 @@ class QuizViewModel @Inject constructor(
     private val _error = MutableStateFlow<String?>(null)
     val error: StateFlow<String?> = _error.asStateFlow()
 
+    private val _toastMessage = MutableSharedFlow<String>()
+    val toastMessage = _toastMessage.asSharedFlow()
+
     private var isSubmitting = false
     private var timerJob: Job? = null
 
@@ -173,6 +176,16 @@ class QuizViewModel @Inject constructor(
         updateStreak()
         loadCategories()
         loadAchievements()
+        observeBookmarkStatus()
+    }
+
+    private fun observeBookmarkStatus() {
+        combine(_currentQuestionIndex, _questions, bookmarkedQuestions) { index, questions, bookmarks ->
+            val currentQuestion = questions.getOrNull(index)
+            currentQuestion != null && bookmarks.any { it.questionId == currentQuestion.id }
+        }.onEach { isBookmarked ->
+            _isBookmarked.value = isBookmarked
+        }.launchIn(viewModelScope)
     }
 
     fun loadCategories() {
@@ -383,11 +396,19 @@ class QuizViewModel @Inject constructor(
         isSubmitting = false
         isSessionInitialized = false
         pendingSession = null
+        _isLoading.value = false
     }
 
     fun loadQuestions(categoryId: String, chapterId: String, chapterName: String, categoryColor: String = "#7B1FA2") {
+        // 🔥 OPTIMIZATION: Prevent reload if already loaded (e.g., on rotation or returning to screen)
+        if (currentChapterId == chapterId && _questions.value.isNotEmpty()) {
+            Log.d("QUIZ_DEBUG", "Quiz already loaded for $chapterId, skipping reload")
+            return
+        }
+
         viewModelScope.launch {
-            resetQuizState() // 🔥 CRITICAL: Clear previous quiz state before starting new one
+            resetQuizState() 
+            _isLoading.value = true 
             
             isDailyChallenge = (categoryId == "random")
             currentCategoryId = categoryId
@@ -412,11 +433,11 @@ class QuizViewModel @Inject constructor(
                 val sessionResource = quizRepository.getQuizSession(userId, chapterId)
                 if (sessionResource is Resource.Success && sessionResource.data != null) {
                     val session = sessionResource.data
-                    // 🔥 FIX: Only show resume if there is actual progress
                     if (session.currentIndex > 0 || session.answers.isNotEmpty()) {
                         pendingSession = session
                         _resumeMessage.value = "You answered ${session.answers.size} / ${session.totalQuestions} questions"
                         _showResumeDialog.value = true
+                        _isLoading.value = false 
                         return@launch
                     }
                 }
@@ -424,6 +445,7 @@ class QuizViewModel @Inject constructor(
             
             if (!networkUtils.isNetworkAvailable()) {
                 _error.value = "No internet connection"
+                _isLoading.value = false
                 return@launch
             }
 
@@ -435,6 +457,9 @@ class QuizViewModel @Inject constructor(
         _isLoading.value = true
         Log.d("QUIZ_DEBUG", "Fetching questions for chapterId: $chapterId, isResuming: $isResuming")
         try {
+            // Remove artificial delay for faster loading when data is cached or network is fast
+            // delay(300)
+
             val result = if (isDailyChallenge) {
                 quizRepository.getRandomQuestions(10)
             } else {
@@ -492,8 +517,16 @@ class QuizViewModel @Inject constructor(
     }
 
     fun startQuestionTimer() {
-        _timeRemaining.value = 30
-        resumeTimer()
+        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value)
+        val state = _answerState.value[currentQuestion?.id] ?: AnswerState.UNANSWERED
+        
+        if (state == AnswerState.UNANSWERED) {
+            _timeRemaining.value = 30
+            resumeTimer()
+        } else {
+            timerJob?.cancel()
+            _timeRemaining.value = 0
+        }
     }
 
     fun pauseTimer() {
@@ -501,7 +534,14 @@ class QuizViewModel @Inject constructor(
     }
 
     fun resumeTimer() {
-        startTimerWithRemaining()
+        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value)
+        val state = _answerState.value[currentQuestion?.id] ?: AnswerState.UNANSWERED
+        
+        if (state == AnswerState.UNANSWERED) {
+            startTimerWithRemaining()
+        } else {
+            timerJob?.cancel()
+        }
     }
 
     private fun startTimerWithRemaining() {
@@ -517,6 +557,7 @@ class QuizViewModel @Inject constructor(
 
     fun onTimeUp() {
         timerJob?.cancel()
+        _timeRemaining.value = 0
         
         val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value)
         if (currentQuestion != null) {
@@ -653,15 +694,14 @@ class QuizViewModel @Inject constructor(
     }
 
     fun submitQuiz() {
-        if (_questions.value.isEmpty()) return // 🔥 Prevent auto-submit if no questions loaded
-        if (isSubmitting) return // 🔥 Prevent multiple submissions
+        if (_questions.value.isEmpty()) return 
+        if (isSubmitting) return 
         isSubmitting = true
         timerJob?.cancel()
 
         viewModelScope.launch {
             val currentStates = _answerState.value.toMutableMap()
             
-            // Mark all unanswered questions as SKIPPED
             _questions.value.forEach { question ->
                 if (!currentStates.containsKey(question.id)) {
                     currentStates[question.id] = AnswerState.SKIPPED
@@ -674,7 +714,6 @@ class QuizViewModel @Inject constructor(
             val scorePercentage = if (totalQuestions > 0) (correctCount * 100) / totalQuestions else 0
             
             var xpEarned = correctCount * 10
-            // Feature: 10th number bonus
             if (correctCount >= 10) {
                 xpEarned += 25 
             }
@@ -697,41 +736,29 @@ class QuizViewModel @Inject constructor(
             _quizResult.value = Resource.Success(result)
             _xpAwardedInThisSession.value = xpEarned
             
-            // Handle Challenge Completion logic linking result -> challenge type
             checkChallengeCompletion(correctCount, totalQuestions, scorePercentage)
-            
-            // Trigger Achievements
             checkAchievements(correctCount, totalQuestions)
             
-            // Save results to user profile
             val userId = FirebaseAuth.getInstance().currentUser?.uid
             if (userId != null) {
                 quizRepository.saveQuizResult(userId, result)
                 storeRepository.addCoins(coinsEarned)
-                // 🔥 Clear session after successful submission
                 quizRepository.deleteQuizSession(userId, currentChapterId)
             }
         }
     }
 
     private suspend fun checkChallengeCompletion(score: Int, total: Int, percentage: Int) {
-        // Daily Challenge: Answer 10 questions
         if (isDailyChallenge && currentChapterId == "daily" && total >= 10) {
             dailyChallengeManager.completeChallenge("daily", 25, 10)
         }
-        
-        // Speed Challenge: Complete in 60 sec (Total time taken)
         val timeTaken = (System.currentTimeMillis() - quizStartTime) / 1000
         if (isDailyChallenge && currentChapterId == "speed" && timeTaken <= 60) {
             dailyChallengeManager.completeChallenge("speed", 30, 15)
         }
-        
-        // Accuracy Challenge: Score 100%
         if (isDailyChallenge && currentChapterId == "accuracy" && percentage == 100) {
             dailyChallengeManager.completeChallenge("accuracy", 40, 20)
         }
-        
-        // Category Challenge: Complete any quiz in a specific category (implied here)
         if (!isDailyChallenge) {
             dailyChallengeManager.completeChallenge("category", 20, 10)
         }
@@ -741,11 +768,9 @@ class QuizViewModel @Inject constructor(
         if (score == total && total >= 5) {
             unlockAchievement("perfect_score")
         }
-        
         if (_streakCount.value >= 7) {
             unlockAchievement("7_day_streak")
         }
-        
         if (_totalXP.value + (score * 10) >= 500) {
             unlockAchievement("xp_500")
         }
@@ -766,7 +791,6 @@ class QuizViewModel @Inject constructor(
                         "unlockedAt" to System.currentTimeMillis()
                     )
                     achievementRef.set(achievementData).await()
-                    // You might want to emit an event to show a toast or dialog
                     Log.d("ACHIEVEMENT", "🏆 Achievement Unlocked: $id")
                 }
             } catch (e: Exception) {
@@ -777,9 +801,10 @@ class QuizViewModel @Inject constructor(
 
     fun toggleBookmark(question: Question) {
         viewModelScope.launch {
-            if (_isBookmarked.value) {
+            val currentlyBookmarked = bookmarkedQuestions.value.any { it.questionId == question.id }
+            if (currentlyBookmarked) {
                 bookmarkDao.deleteByQuestionId(question.id)
-                _isBookmarked.value = false
+                _toastMessage.emit("Removed from bookmark")
             } else {
                 bookmarkDao.insertBookmark(BookmarkEntity(
                     questionId = question.id,
@@ -790,7 +815,7 @@ class QuizViewModel @Inject constructor(
                     topicName = currentChapterName,
                     categoryName = currentCategoryId
                 ))
-                _isBookmarked.value = true
+                _toastMessage.emit("Added to bookmark")
             }
         }
     }
