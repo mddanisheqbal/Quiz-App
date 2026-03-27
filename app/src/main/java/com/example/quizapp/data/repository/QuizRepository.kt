@@ -69,6 +69,28 @@ class QuizRepository @Inject constructor(
         awaitClose { subscription.remove() }
     }
 
+    suspend fun getQuestions(chapterId: String): Resource<List<Question>> {
+        return try {
+            val snapshot = questionsCollection.whereEqualTo("chapterId", chapterId).get().await()
+            val questions = snapshot.toObjects(Question::class.java)
+            Resource.Success(questions)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to fetch questions")
+        }
+    }
+
+    suspend fun getRandomQuestions(limit: Int): Resource<List<Question>> {
+        return try {
+            // Firestore doesn't support native random, so we get all and shuffle or use a better approach.
+            // For small/medium datasets, fetching a larger chunk and picking random is okay.
+            val snapshot = questionsCollection.limit(100).get().await()
+            val questions = snapshot.toObjects(Question::class.java).shuffled().take(limit)
+            Resource.Success(questions)
+        } catch (e: Exception) {
+            Resource.Error(e.message ?: "Failed to fetch random questions")
+        }
+    }
+
     /**
      * Real-time questions stream for a chapter
      */
@@ -203,9 +225,26 @@ class QuizRepository @Inject constructor(
         }
     }
 
-    suspend fun saveQuizResult(result: QuizResult): Resource<Unit> {
+    suspend fun saveQuizResult(userId: String, result: QuizResult): Resource<Unit> {
         return try {
-            resultsCollection.document(result.id).set(result).await()
+            val resultId = resultsCollection.document().id
+            val finalResult = result.copy(id = resultId, userId = userId)
+            resultsCollection.document(resultId).set(finalResult).await()
+            
+            // Also update user's totalXP and monthlyXP
+            val userRef = usersCollection.document(userId)
+            firestore.runTransaction { transaction ->
+                val snapshot = transaction.get(userRef)
+                val user = snapshot.toObject(User::class.java) ?: return@runTransaction
+                
+                transaction.update(userRef, mapOf(
+                    "totalXP" to (user.totalXP + result.totalScore), // Assuming xpEarned is totalScore
+                    "monthlyXP" to (user.monthlyXP + result.totalScore),
+                    "quizzesCompleted" to (user.quizzesCompleted + 1),
+                    "correctAnswers" to (user.correctAnswers + result.correctAnswers)
+                ))
+            }.await()
+
             Resource.Success(Unit)
         } catch (e: Exception) {
             Resource.Error(e.message ?: "Failed to save result")

@@ -9,6 +9,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import com.example.quizapp.presentation.screens.*
 import com.example.quizapp.presentation.screens.admin.*
+import com.example.quizapp.presentation.viewmodel.DailyChallengeViewModel
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
 import com.example.quizapp.presentation.viewmodel.UserViewModel
 
@@ -91,7 +92,6 @@ fun NavGraph(
                         userViewModel = userViewModel,
                         quizViewModel = quizViewModel,
                         onNavigateToTopic = { categoryId, categoryName, categoryColor ->
-                            // Strip # for URL safety
                             val safeColor = categoryColor.replace("#", "")
                             navController.navigate(Screen.Chapter.createRoute(categoryId, categoryName, safeColor))
                         },
@@ -266,7 +266,23 @@ fun NavGraph(
             }
 
             composable(Screen.DailyChallenge.route) {
-                DailyChallengeScreen(onNavigateBack = { navController.popBackStack() })
+                val dailyChallengeViewModel: DailyChallengeViewModel = hiltViewModel()
+                val userViewModel: UserViewModel = hiltViewModel()
+                
+                DailyChallengeScreen(
+                    userViewModel = userViewModel,
+                    challengeManager = dailyChallengeViewModel.challengeManager,
+                    challengeViewModel = dailyChallengeViewModel,
+                    onChallengeClick = { challenge ->
+                        when (challenge.id) {
+                            "daily" -> navController.navigate(Screen.Quiz.createRoute("random", "daily", "Daily Challenge"))
+                            "speed" -> navController.navigate(Screen.Quiz.createRoute("random", "speed", "Speed Challenge"))
+                            "accuracy" -> navController.navigate(Screen.Quiz.createRoute("random", "accuracy", "Accuracy Challenge"))
+                            "category" -> navController.navigate(Screen.Home.route)
+                        }
+                    },
+                    onNavigateBack = { navController.popBackStack() }
+                )
             }
 
             composable(Screen.Achievements.route) {

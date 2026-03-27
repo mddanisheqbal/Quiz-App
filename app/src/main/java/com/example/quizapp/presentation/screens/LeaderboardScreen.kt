@@ -1,6 +1,5 @@
 package com.example.quizapp.presentation.screens
 
-import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
@@ -25,7 +24,6 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -35,6 +33,8 @@ import com.example.quizapp.presentation.viewmodel.QuizViewModel
 import com.example.quizapp.presentation.viewmodel.UserViewModel
 import com.example.quizapp.util.Resource
 import kotlin.math.absoluteValue
+import kotlin.math.cos
+import kotlin.math.sin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -241,8 +241,8 @@ val JaggedBadgeShape = GenericShape { size, _ ->
     for (i in 0 until points * 2) {
         val r = if (i % 2 == 0) radius else innerRadius
         val angle = Math.PI * i / points
-        val x = centerX + r * Math.cos(angle).toFloat()
-        val y = centerY + r * Math.sin(angle).toFloat()
+        val x = centerX + r * cos(angle.toFloat()).toFloat()
+        val y = centerY + r * sin(angle.toFloat()).toFloat()
         if (i == 0) moveTo(x, y) else lineTo(x, y)
     }
     close()

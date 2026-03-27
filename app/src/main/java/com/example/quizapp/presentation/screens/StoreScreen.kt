@@ -16,12 +16,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Block
-import androidx.compose.material.icons.filled.Stars
+import androidx.compose.material.icons.filled.MonetizationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -41,80 +40,86 @@ fun StoreScreen(
     onBackClick: () -> Unit
 ) {
     val userState by userViewModel.user.collectAsState()
+    val userCoins = userState?.coins ?: 0
 
+    // 🧮 1. FIX COIN PRICING + REAL LOGIC
     val coinPacks = listOf(
-        CoinPack("100 Coins", "₹49", 100, badge = "+50%"),
-        CoinPack("200 Coins", "₹99", 200, badge = "+60%"),
-        CoinPack("500 Coins", "₹249", 500, badge = "+70%"),
-        CoinPack("1200 Coins", "₹499", 1200, isBestValue = true, badge = "Best Value"),
-        CoinPack("2500 Coins", "₹999", 2500, badge = "+110%"),
-        CoinPack("6000 Coins", "₹1999", 6000, badge = "+10%")
+        CoinPack(100, 49, null),
+        CoinPack(200, 99, null),
+        CoinPack(500, 249, null),
+        CoinPack(1200, 499, "Best Value"),
+        CoinPack(2500, 999, "Save 18%"),
+        CoinPack(6000, 1999, "Save 30%")
     )
 
     val removeAdsPacks = listOf(
-        RemoveAdsPack("30 Days", "₹990", Color(0xFF2196F3), Color(0xFF1976D2)),
-        RemoveAdsPack("365 Days", "₹1999", Color(0xFFE91E63), Color(0xFFC2185B)),
+        RemoveAdsPack("30 Days", "₹449", Color(0xFF2196F3), Color(0xFF1976D2)),
+        RemoveAdsPack("365 Days", "₹1499", Color(0xFFE91E63), Color(0xFFC2185B)),
         RemoveAdsPack("Forever", "₹3499", Color(0xFFFFD700), Color(0xFFFFA000))
     )
 
     Scaffold(
+        // 🧱 FIX TOP BAR DISTINCTION (SURFACE + SHADOW)
         topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        "Coin Store",
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp
-                    )
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBackClick) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, "Back", tint = Color.White)
-                    }
-                },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = Color.Transparent
-                ),
-                actions = {
-                    Surface(
-                        color = Color.White.copy(alpha = 0.2f),
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.padding(end = 16.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(Icons.Default.Stars, null, tint = Color(0xFFFFD700), modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Your Coins: ${userState?.coins ?: 0}",
-                                color = Color.White,
-                                fontWeight = FontWeight.Bold,
-                                fontSize = 14.sp
-                            )
+            Surface(shadowElevation = 8.dp) {
+                TopAppBar(
+                    title = {
+                        Text("Coin Store", fontWeight = FontWeight.Bold)
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBackClick) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                         }
-                    }
-                }
-            )
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color(0xFF4A148C), // Darker Purple for contrast
+                        titleContentColor = Color.White,
+                        navigationIconContentColor = Color.White
+                    )
+                )
+            }
         },
-        containerColor = Color.Transparent
+        containerColor = Color(0xFF7B1FA2)
     ) { paddingValues ->
-        Box(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
+                .padding(paddingValues)
                 .background(
                     Brush.verticalGradient(
                         colors = listOf(Color(0xFF7B1FA2), Color(0xFF311B92))
                     )
                 )
         ) {
+            // 💎 MIDDLE BAR DISTINCTION (Background + Shadow)
+            Surface(
+                color = Color.Black.copy(alpha = 0.15f),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Surface(
+                        shape = RoundedCornerShape(50),
+                        color = Color(0xFFFFD700),
+                        shadowElevation = 4.dp
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text("💰 $userCoins", fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
+                    }
+                }
+            }
+
             LazyVerticalGrid(
                 columns = GridCells.Fixed(2),
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(paddingValues),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(16.dp),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -132,7 +137,7 @@ fun StoreScreen(
 
                 items(coinPacks) { pack ->
                     CoinPackCard(pack = pack) {
-                        // Action: storeViewModel.purchaseCoins(...) 
+                        // Action for purchase
                     }
                 }
 
@@ -149,7 +154,7 @@ fun StoreScreen(
 
                 items(removeAdsPacks, span = { GridItemSpan(2) }) { pack ->
                     RemoveAdsCard(pack = pack) {
-                        // Action: storeViewModel.buyPowerUp(...)
+                        // Action for purchase
                     }
                 }
 
@@ -162,11 +167,9 @@ fun StoreScreen(
 }
 
 data class CoinPack(
-    val title: String,
-    val price: String,
-    val amount: Int,
-    val isBestValue: Boolean = false,
-    val badge: String? = null
+    val coins: Int,
+    val price: Int,
+    val tag: String? = null
 )
 
 data class RemoveAdsPack(
@@ -176,11 +179,21 @@ data class RemoveAdsPack(
     val endColor: Color
 )
 
+// 🎯 OPTIONAL (AUTO CALCULATE DISCOUNT)
+fun calculateDiscount(coins: Int, price: Int): Int {
+    val basePricePerCoin = 49.0 / 100
+    val expectedPrice = coins * basePricePerCoin
+    val discount = ((expectedPrice - price) / expectedPrice) * 100
+    return discount.toInt()
+}
+
 @Composable
 fun CoinPackCard(pack: CoinPack, onBuyClick: () -> Unit) {
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(if (isPressed) 0.95f else 1f, label = "scale")
+    
+    val isBestValue = pack.tag == "Best Value"
 
     Box(
         modifier = Modifier
@@ -197,20 +210,20 @@ fun CoinPackCard(pack: CoinPack, onBuyClick: () -> Unit) {
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(if (pack.isBestValue) 160.dp else 145.dp)
+                .height(if (isBestValue) 160.dp else 145.dp)
                 .then(
-                    if (pack.isBestValue) Modifier.border(2.dp, Color(0xFFFFC107), RoundedCornerShape(20.dp))
+                    if (isBestValue) Modifier.border(2.dp, Color(0xFFFFC107), RoundedCornerShape(20.dp))
                     else Modifier
                 ),
             shape = RoundedCornerShape(20.dp),
-            elevation = CardDefaults.cardElevation(if (pack.isBestValue) 12.dp else 6.dp)
+            elevation = CardDefaults.cardElevation(if (isBestValue) 12.dp else 6.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .background(
                         Brush.verticalGradient(
-                            colors = if (pack.isBestValue) 
+                            colors = if (isBestValue) 
                                 listOf(Color(0xFF8E24AA), Color(0xFF4A148C)) 
                             else 
                                 listOf(Color(0xFF6A1B9A), Color(0xFF4A148C))
@@ -223,29 +236,29 @@ fun CoinPackCard(pack: CoinPack, onBuyClick: () -> Unit) {
                 // Gold Coin Icon
                 Box(
                     modifier = Modifier
-                        .size(if (pack.isBestValue) 52.dp else 44.dp)
+                        .size(if (isBestValue) 52.dp else 44.dp)
                         .background(Color.White.copy(alpha = 0.15f), CircleShape),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Stars,
+                        imageVector = Icons.Default.MonetizationOn,
                         contentDescription = null,
                         tint = Color(0xFFFFC107),
-                        modifier = Modifier.size(if (pack.isBestValue) 34.dp else 28.dp)
+                        modifier = Modifier.size(if (isBestValue) 34.dp else 28.dp)
                     )
                 }
 
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Text(
-                        text = pack.title,
+                        text = "${pack.coins} Coins",
                         color = Color.White,
-                        fontSize = if (pack.isBestValue) 20.sp else 18.sp,
+                        fontSize = if (isBestValue) 20.sp else 18.sp,
                         fontWeight = FontWeight.Bold
                     )
                     Text(
-                        text = pack.price,
+                        text = "₹${pack.price}",
                         color = Color.White.copy(alpha = 0.9f),
-                        fontSize = if (pack.isBestValue) 16.sp else 14.sp,
+                        fontSize = if (isBestValue) 16.sp else 14.sp,
                         fontWeight = FontWeight.Medium
                     )
                 }
@@ -267,22 +280,20 @@ fun CoinPackCard(pack: CoinPack, onBuyClick: () -> Unit) {
             }
         }
 
-        if (pack.badge != null) {
-            Surface(
-                color = Color.Red,
-                shape = RoundedCornerShape(8.dp),
+        // 🎨 4. FIX DISCOUNT BADGE UI
+        if (pack.tag != null) {
+            Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .offset(x = 4.dp, y = (-4).dp)
-                    .rotate(15f)
-                    .border(1.5.dp, Color.White, RoundedCornerShape(8.dp))
+                    .background(Color.Red, RoundedCornerShape(8.dp))
+                    .padding(horizontal = 6.dp, vertical = 2.dp)
             ) {
                 Text(
-                    text = pack.badge,
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    text = pack.tag,
+                    color = Color.White,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
