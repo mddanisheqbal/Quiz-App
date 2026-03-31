@@ -19,12 +19,39 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.tasks.await
 import javax.inject.Inject
 
 enum class AnswerState {
     CORRECT, INCORRECT, UNANSWERED, SKIPPED
 }
+
+data class AnswerResult(
+    val question: String,
+    val userAnswer: String?,
+    val correctAnswer: String,
+    val isCorrect: Boolean
+)
+
+data class QuizUiState(
+    val questions: List<Question> = emptyList(),
+    val currentIndex: Int = 0,
+    val selectedAnswers: Map<String, String> = emptyMap(),
+    val answerState: Map<String, AnswerState> = emptyMap(),
+    val selectedAnswer: String? = null,
+    val showResult: Boolean = false,
+    val isTimeUp: Boolean = false,
+    val showTimeUpDialog: Boolean = false,
+    val isFinished: Boolean = false,
+    val isLoading: Boolean = false,
+    val error: String? = null,
+    val timeRemaining: Int = 30,
+    val isHintVisible: Boolean = false,
+    val removedOptions: Set<String> = emptySet(),
+    val quizResult: Resource<QuizResult>? = null,
+    val xpAwarded: Int? = null,
+    val starsEarned: Int = 0,
+    val wrongAnswers: List<AnswerResult> = emptyList()
+)
 
 @HiltViewModel
 class QuizViewModel @Inject constructor(
@@ -42,50 +69,39 @@ class QuizViewModel @Inject constructor(
     private val firestore: FirebaseFirestore
 ) : ViewModel() {
 
+    private val _uiState = MutableStateFlow(QuizUiState())
+    val uiState: StateFlow<QuizUiState> = _uiState.asStateFlow()
+
+    // Backward compatibility flows
+    val questions = _uiState.map { it.questions }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    val currentQuestionIndex = _uiState.map { it.currentIndex }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val selectedAnswers = _uiState.map { it.selectedAnswers }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    val selectedAnswer = _uiState.map { it.selectedAnswer }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val showResult = _uiState.map { it.showResult }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val isTimeUp = _uiState.map { it.isTimeUp }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val showTimeUpDialog = _uiState.map { it.showTimeUpDialog }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val answerState = _uiState.map { it.answerState }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    val quizResult = _uiState.map { it.quizResult }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val timeRemaining = _uiState.map { it.timeRemaining }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 30)
+    val stars = _uiState.map { it.starsEarned }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    val xpAwardedInThisSession = _uiState.map { it.xpAwarded }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val isHintVisible = _uiState.map { it.isHintVisible }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val removedOptions = _uiState.map { it.removedOptions }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
+    val isLoading = _uiState.map { it.isLoading }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
+    val error = _uiState.map { it.error }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+    val wrongAnswers = _uiState.map { it.wrongAnswers }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
     private val _categories = MutableStateFlow<Resource<List<Category>>>(Resource.Loading())
     val categories: StateFlow<Resource<List<Category>>> = _categories
 
     private val _topics = MutableStateFlow<Resource<List<Topic>>>(Resource.Loading())
     val topics: StateFlow<Resource<List<Topic>>> = _topics
 
-    private val _questions = MutableStateFlow<List<Question>>(emptyList())
-    val questions: StateFlow<List<Question>> = _questions
-
-    private val _currentQuestionIndex = MutableStateFlow(0)
-    val currentQuestionIndex: StateFlow<Int> = _currentQuestionIndex
-
-    private val _selectedAnswers = MutableStateFlow<Map<String, String>>(emptyMap())
-    val selectedAnswers: StateFlow<Map<String, String>> = _selectedAnswers
-
-    private val _selectedAnswer = MutableStateFlow<String?>(null)
-    val selectedAnswer: StateFlow<String?> = _selectedAnswer
-
-    private val _showResult = MutableStateFlow(false)
-    val showResult: StateFlow<Boolean> = _showResult
-
-    private val _isTimeUp = MutableStateFlow(false)
-    val isTimeUp: StateFlow<Boolean> = _isTimeUp
-
-    private val _showTimeUpDialog = MutableStateFlow(false)
-    val showTimeUpDialog: StateFlow<Boolean> = _showTimeUpDialog
-
-    private val _answerState = MutableStateFlow<Map<String, AnswerState>>(emptyMap())
-    val answerState: StateFlow<Map<String, AnswerState>> = _answerState
-
-    private val _quizResult = MutableStateFlow<Resource<QuizResult>?>(null)
-    val quizResult: StateFlow<Resource<QuizResult>?> = _quizResult
-
     private val _showResumeDialog = MutableStateFlow(false)
     val showResumeDialog: StateFlow<Boolean> = _showResumeDialog
 
     private val _resumeMessage = MutableStateFlow("")
     val resumeMessage: StateFlow<String> = _resumeMessage
-
-    private val _timeRemaining = MutableStateFlow(30)
-    val timeRemaining: StateFlow<Int> = _timeRemaining
-
-    private val _stars = MutableStateFlow(0)
-    val stars: StateFlow<Int> = _stars
 
     private val _userAchievements = MutableStateFlow<Resource<List<UserAchievement>>>(Resource.Loading())
     val userAchievements: StateFlow<Resource<List<UserAchievement>>> = _userAchievements
@@ -111,9 +127,6 @@ class QuizViewModel @Inject constructor(
     private val _monthlyLeaderboard = MutableStateFlow<Resource<List<User>>>(Resource.Loading())
     val monthlyLeaderboard: StateFlow<Resource<List<User>>> = _monthlyLeaderboard
 
-    private val _xpAwardedInThisSession = MutableStateFlow<Int?>(null)
-    val xpAwardedInThisSession: StateFlow<Int?> = _xpAwardedInThisSession
-
     private val _isBookmarked = MutableStateFlow(false)
     val isBookmarked: StateFlow<Boolean> = _isBookmarked
 
@@ -132,20 +145,12 @@ class QuizViewModel @Inject constructor(
     private val _showDailyRewardDialog = MutableStateFlow(false)
     val showDailyRewardDialog: StateFlow<Boolean> = _showDailyRewardDialog
 
-    private val _isHintVisible = MutableStateFlow(false)
-    val isHintVisible: StateFlow<Boolean> = _isHintVisible
-
-    private val _removedOptions = MutableStateFlow<Set<String>>(emptySet())
-    val removedOptions: StateFlow<Set<String>> = _removedOptions
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
-
     private val _toastMessage = MutableSharedFlow<String>()
     val toastMessage = _toastMessage.asSharedFlow()
+
+    val isAllAnswered: StateFlow<Boolean> = _uiState.map { state ->
+        state.questions.isNotEmpty() && state.questions.all { state.answerState.containsKey(it.id) }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), false)
 
     private var isSubmitting = false
     private var timerJob: Job? = null
@@ -155,10 +160,15 @@ class QuizViewModel @Inject constructor(
     val bookmarkedQuestions: StateFlow<List<BookmarkEntity>> = bookmarkDao.getAllBookmarks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    // Public info for retry navigation
+    var currentTopicId: String = ""
+        private set
+    var currentCategoryId: String = ""
+        private set
+    var currentTopicName: String = ""
+        private set
+
     private var currentQuizId = ""
-    private var currentCategoryId = ""
-    private var currentChapterId = ""
-    private var currentChapterName = ""
     private var isDailyChallenge = false
     private var quizStartTime = 0L
 
@@ -183,7 +193,7 @@ class QuizViewModel @Inject constructor(
     }
 
     private fun observeBookmarkStatus() {
-        combine(_currentQuestionIndex, _questions, bookmarkedQuestions) { index, questions, bookmarks ->
+        combine(_uiState.map { it.currentIndex }, _uiState.map { it.questions }, bookmarkedQuestions) { index, questions, bookmarks ->
             val currentQuestion = questions.getOrNull(index)
             currentQuestion != null && bookmarks.any { it.questionId == currentQuestion.id }
         }.onEach { isBookmarked ->
@@ -238,7 +248,7 @@ class QuizViewModel @Inject constructor(
         viewModelScope.launch {
             val newStreak = streakManager.updateDailyStreak()
             _streakCount.value = newStreak
-            
+
             // Trigger streak achievement
             val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
             val userResult = quizRepository.getUserProfile(userId)
@@ -275,19 +285,19 @@ class QuizViewModel @Inject constructor(
             val result = quizRepository.getUserProfile(userId)
             if (result is Resource.Success) {
                 val user = result.data!!
-                
+
                 // Reset challenges if needed
                 val updatedUser = dailyChallengeManager.checkAndResetChallenges(user)
-                
+
                 _totalXP.value = updatedUser.totalXP
                 _streakCount.value = updatedUser.streak
-                
+
                 val calculatedLevel = Constants.calculateLevel(updatedUser.totalXP)
                 _userLevel.value = calculatedLevel
-                
+
                 _completedChallenges.value = updatedUser.completedChallenges
                 prefsManager.setTotalXP(updatedUser.totalXP)
-                
+
                 if (updatedUser.level != calculatedLevel) {
                     quizRepository.updateUserLevel(userId, calculatedLevel)
                 }
@@ -298,7 +308,7 @@ class QuizViewModel @Inject constructor(
                     quizRepository.updateUserAchievements(userId, levelUser.achievements)
                 }
             }
-            
+
             restoreTopicProgress(userId)
         }
     }
@@ -329,14 +339,14 @@ class QuizViewModel @Inject constructor(
 
     fun showRewardedAd(activity: Activity) {
         if (!networkUtils.isNetworkAvailable()) return
-        
+
         rewardedAdManager.showRewardedAd(
             activity = activity,
             onRewardEarned = { _ ->
                 viewModelScope.launch {
                     val rewardCoins = 20 + (Math.random() * 30).toInt()
                     storeRepository.addCoins(rewardCoins)
-                    
+
                     // Trigger economy achievement
                     val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return@launch
                     val userResult = quizRepository.getUserProfile(userId)
@@ -356,10 +366,10 @@ class QuizViewModel @Inject constructor(
     fun isAdLoaded(): Boolean = rewardedAdManager.isAdLoaded()
 
     fun useHint(): Boolean {
-        if (coins.value >= 10 && !_isHintVisible.value) {
+        if (coins.value >= 10 && !uiState.value.isHintVisible) {
             viewModelScope.launch {
                 if (coinsManager.spendCoins(10)) {
-                    _isHintVisible.value = true
+                    _uiState.update { it.copy(isHintVisible = true) }
                 }
             }
             return true
@@ -371,6 +381,12 @@ class QuizViewModel @Inject constructor(
         if (coins.value >= 15) {
             viewModelScope.launch {
                 if (coinsManager.spendCoins(15)) {
+                    val currentQuestion = uiState.value.questions.getOrNull(uiState.value.currentIndex)
+                    if (currentQuestion != null) {
+                        val currentStates = uiState.value.answerState.toMutableMap()
+                        currentStates[currentQuestion.id] = AnswerState.SKIPPED
+                        _uiState.update { it.copy(answerState = currentStates) }
+                    }
                     nextQuestion()
                 }
             }
@@ -380,10 +396,10 @@ class QuizViewModel @Inject constructor(
     }
 
     fun removeTwoOptionsPowerUp() {
-        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value) ?: return
+        val currentQuestion = uiState.value.questions.getOrNull(uiState.value.currentIndex) ?: return
         if (currentQuestion.questionType != QuestionType.MULTIPLE_CHOICE) return
         if (currentQuestion.options.size < 3) return
-        if (_removedOptions.value.isNotEmpty()) return
+        if (uiState.value.removedOptions.isNotEmpty()) return
 
         if (coins.value >= 10) {
             viewModelScope.launch {
@@ -393,7 +409,7 @@ class QuizViewModel @Inject constructor(
                     options.remove(correct)
                     options.shuffle()
                     val toRemove = options.take(2).toSet()
-                    _removedOptions.value = toRemove
+                    _uiState.update { it.copy(removedOptions = toRemove) }
                 }
             }
         }
@@ -407,43 +423,26 @@ class QuizViewModel @Inject constructor(
 
     fun resetQuizState() {
         timerJob?.cancel()
-        _questions.value = emptyList()
-        _currentQuestionIndex.value = 0
-        _selectedAnswers.value = emptyMap()
-        _selectedAnswer.value = null
-        _showResult.value = false
-        _isTimeUp.value = false
-        _showTimeUpDialog.value = false
-        _answerState.value = emptyMap()
-        _quizResult.value = null
-        _xpAwardedInThisSession.value = null
-        _stars.value = 0
-        _isHintVisible.value = false
-        _removedOptions.value = emptySet()
-        _error.value = null
-        _timeRemaining.value = 30
+        _uiState.value = QuizUiState()
         isSubmitting = false
         isSessionInitialized = false
         pendingSession = null
-        _isLoading.value = false
     }
 
     fun loadQuestions(categoryId: String, chapterId: String, chapterName: String, categoryColor: String = "#7B1FA2") {
-        // 🔥 OPTIMIZATION: Prevent reload if already loaded (e.g., on rotation or returning to screen)
-        if (currentChapterId == chapterId && _questions.value.isNotEmpty()) {
-            Log.d("QUIZ_DEBUG", "Quiz already loaded for $chapterId, skipping reload")
+        if (currentTopicId == chapterId && uiState.value.questions.isNotEmpty()) {
             return
         }
 
         viewModelScope.launch {
-            resetQuizState() 
-            _isLoading.value = true 
-            
+            resetQuizState()
+            _uiState.update { it.copy(isLoading = true) }
+
             isDailyChallenge = (categoryId == "random")
             currentCategoryId = categoryId
-            currentChapterId = chapterId
-            currentChapterName = chapterName
-            currentQuizId = chapterId 
+            currentTopicId = chapterId
+            currentTopicName = chapterName
+            currentQuizId = chapterId
             quizStartTime = System.currentTimeMillis()
 
             val userId = FirebaseAuth.getInstance().currentUser?.uid
@@ -466,15 +465,14 @@ class QuizViewModel @Inject constructor(
                         pendingSession = session
                         _resumeMessage.value = "You answered ${session.answers.size} / ${session.totalQuestions} questions"
                         _showResumeDialog.value = true
-                        _isLoading.value = false 
+                        _uiState.update { it.copy(isLoading = false) }
                         return@launch
                     }
                 }
             }
             
             if (!networkUtils.isNetworkAvailable()) {
-                _error.value = "No internet connection"
-                _isLoading.value = false
+                _uiState.update { it.copy(error = "No internet connection", isLoading = false) }
                 return@launch
             }
 
@@ -483,12 +481,8 @@ class QuizViewModel @Inject constructor(
     }
 
     private suspend fun fetchQuestions(chapterId: String, isResuming: Boolean, savedOrder: List<String>? = null) {
-        _isLoading.value = true
-        Log.d("QUIZ_DEBUG", "Fetching questions for chapterId: $chapterId, isResuming: $isResuming")
+        _uiState.update { it.copy(isLoading = true) }
         try {
-            // Remove artificial delay for faster loading when data is cached or network is fast
-            // delay(300)
-
             val result = if (isDailyChallenge) {
                 quizRepository.getRandomQuestions(10)
             } else {
@@ -498,20 +492,13 @@ class QuizViewModel @Inject constructor(
             when (result) {
                 is Resource.Success<List<Question>> -> {
                     val questionsList = result.data ?: emptyList()
-                    Log.d("QUIZ_DEBUG", "Fetched ${questionsList.size} questions")
-                    
+
                     if (questionsList.isEmpty()) {
-                        Log.e("QUIZ_ERROR", "No questions found for topic: $chapterId")
-                        _error.value = "No questions found for this topic."
+                        _uiState.update { it.copy(error = "No questions found for this topic.", isLoading = false) }
                         return
                     }
 
-                    _questions.value = questionsList
-                    
                     if (isResuming && pendingSession != null) {
-                        _currentQuestionIndex.value = pendingSession!!.currentIndex
-                        _selectedAnswers.value = pendingSession!!.answers
-                        
                         // Restore answer states
                         val restoredStates = mutableMapOf<String, AnswerState>()
                         pendingSession!!.answers.forEach { (qid, ans) ->
@@ -521,40 +508,52 @@ class QuizViewModel @Inject constructor(
                                 restoredStates[qid] = if (isCorrect) AnswerState.CORRECT else AnswerState.INCORRECT
                             }
                         }
-                        _answerState.value = restoredStates
+                        
+                        val qId = questionsList.getOrNull(pendingSession!!.currentIndex)?.id
+
+                        _uiState.update { it.copy(
+                            questions = questionsList,
+                            currentIndex = pendingSession!!.currentIndex,
+                            selectedAnswers = pendingSession!!.answers,
+                            answerState = restoredStates,
+                            selectedAnswer = if (qId != null) pendingSession!!.answers[qId] else null,
+                            showResult = if (qId != null) restoredStates.containsKey(qId) else false,
+                            isLoading = false
+                        ) }
+
                         isSessionInitialized = true
                     } else {
-                        _currentQuestionIndex.value = 0
-                        _selectedAnswers.value = emptyMap()
-                        _answerState.value = emptyMap()
+                        _uiState.update { it.copy(
+                            questions = questionsList,
+                            currentIndex = 0,
+                            selectedAnswers = emptyMap(),
+                            answerState = emptyMap(),
+                            isLoading = false
+                        ) }
                     }
-                    
+
                     startQuestionTimer()
                 }
                 is Resource.Error<List<Question>> -> {
-                    Log.e("QUIZ_ERROR", "Error fetching questions: ${result.message}")
-                    _error.value = result.message
+                    _uiState.update { it.copy(error = result.message, isLoading = false) }
                 }
                 else -> {}
             }
         } catch (e: Exception) {
-            Log.e("QUIZ_ERROR", "Exception fetching questions", e)
-            _error.value = e.message
-        } finally {
-            _isLoading.value = false
+            _uiState.update { it.copy(error = e.message, isLoading = false) }
         }
     }
 
     fun startQuestionTimer() {
-        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value)
-        val state = _answerState.value[currentQuestion?.id] ?: AnswerState.UNANSWERED
+        val currentQuestion = uiState.value.questions.getOrNull(uiState.value.currentIndex)
+        val state = uiState.value.answerState[currentQuestion?.id] ?: AnswerState.UNANSWERED
         
         if (state == AnswerState.UNANSWERED) {
-            _timeRemaining.value = 30
+            _uiState.update { it.copy(timeRemaining = 30) }
             resumeTimer()
         } else {
             timerJob?.cancel()
-            _timeRemaining.value = 0
+            _uiState.update { it.copy(timeRemaining = 0) }
         }
     }
 
@@ -563,9 +562,9 @@ class QuizViewModel @Inject constructor(
     }
 
     fun resumeTimer() {
-        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value)
-        val state = _answerState.value[currentQuestion?.id] ?: AnswerState.UNANSWERED
-        
+        val currentQuestion = uiState.value.questions.getOrNull(uiState.value.currentIndex)
+        val state = uiState.value.answerState[currentQuestion?.id] ?: AnswerState.UNANSWERED
+
         if (state == AnswerState.UNANSWERED) {
             startTimerWithRemaining()
         } else {
@@ -576,9 +575,9 @@ class QuizViewModel @Inject constructor(
     private fun startTimerWithRemaining() {
         timerJob?.cancel()
         timerJob = viewModelScope.launch {
-            while (_timeRemaining.value > 0) {
+            while (uiState.value.timeRemaining > 0) {
                 delay(1000)
-                _timeRemaining.value--
+                _uiState.update { it.copy(timeRemaining = it.timeRemaining - 1) }
             }
             onTimeUp()
         }
@@ -586,25 +585,22 @@ class QuizViewModel @Inject constructor(
 
     fun onTimeUp() {
         timerJob?.cancel()
-        _timeRemaining.value = 0
-        
-        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value)
-        if (currentQuestion != null) {
-            val currentStates = _answerState.value.toMutableMap()
-            currentStates[currentQuestion.id] = AnswerState.SKIPPED
-            _answerState.value = currentStates
-        }
+        _uiState.update { it.copy(timeRemaining = 0) }
 
-        viewModelScope.launch {
-            delay(300)
-            _isTimeUp.value = true
-            _showTimeUpDialog.value = true
+        val currentQuestion = uiState.value.questions.getOrNull(uiState.value.currentIndex)
+        if (currentQuestion != null) {
+            val currentStates = uiState.value.answerState.toMutableMap()
+            currentStates[currentQuestion.id] = AnswerState.SKIPPED
+            _uiState.update { it.copy(
+                answerState = currentStates,
+                isTimeUp = true,
+                showTimeUpDialog = true
+            ) }
         }
     }
 
     fun goToNextAfterTimeUp() {
-        _isTimeUp.value = false
-        _showTimeUpDialog.value = false
+        _uiState.update { it.copy(isTimeUp = false, showTimeUpDialog = false) }
         nextQuestion()
     }
 
@@ -613,46 +609,27 @@ class QuizViewModel @Inject constructor(
     }
 
     fun onAnswerSelected(answer: String) {
-        if (_showResult.value || _isTimeUp.value || _showTimeUpDialog.value) return
+        if (uiState.value.showResult || uiState.value.isTimeUp || uiState.value.showTimeUpDialog) return
 
         timerJob?.cancel()
-        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value) ?: return
-        
-        _selectedAnswer.value = answer
-        _showResult.value = true
+        val currentQuestion = uiState.value.questions.getOrNull(uiState.value.currentIndex) ?: return
 
         val isCorrect = currentQuestion.correctAnswer.equals(answer, ignoreCase = true)
         
-        val currentAnswers = _selectedAnswers.value.toMutableMap()
-        currentAnswers[currentQuestion.id] = answer
-        _selectedAnswers.value = currentAnswers
+        val newSelectedAnswers = uiState.value.selectedAnswers.toMutableMap().apply {
+            put(currentQuestion.id, answer)
+        }
 
-        val currentStates = _answerState.value.toMutableMap()
+        val currentStates = uiState.value.answerState.toMutableMap()
         currentStates[currentQuestion.id] = if (isCorrect) AnswerState.CORRECT else AnswerState.INCORRECT
-        _answerState.value = currentStates
 
-        if (!isSessionInitialized) {
-            isSessionInitialized = true
-        }
-        updateSession()
-    }
+        _uiState.update { it.copy(
+            selectedAnswer = answer,
+            showResult = true,
+            selectedAnswers = newSelectedAnswers,
+            answerState = currentStates
+        ) }
 
-    fun setAnswer(questionId: String, answer: String) {
-        if (_questions.value.isEmpty()) return
-
-        val currentAnswers = _selectedAnswers.value.toMutableMap()
-        currentAnswers[questionId] = answer
-        _selectedAnswers.value = currentAnswers
-
-        val currentQuestion = _questions.value.find { it.id == questionId }
-        if (currentQuestion != null) {
-            val isCorrect = currentQuestion.correctAnswer.equals(answer, ignoreCase = true)
-            val currentStates = _answerState.value.toMutableMap()
-            currentStates[questionId] = if (isCorrect) AnswerState.CORRECT else AnswerState.INCORRECT
-            _answerState.value = currentStates
-        }
-
-        // 🔥 Save session ONLY when user interacts
         if (!isSessionInitialized) {
             isSessionInitialized = true
         }
@@ -660,48 +637,61 @@ class QuizViewModel @Inject constructor(
     }
 
     fun nextQuestion() {
-        // Mark as skipped if not answered
-        val currentQuestion = _questions.value.getOrNull(_currentQuestionIndex.value)
-        if (currentQuestion != null && !_answerState.value.containsKey(currentQuestion.id)) {
-            val currentStates = _answerState.value.toMutableMap()
+        val currentQuestion = uiState.value.questions.getOrNull(uiState.value.currentIndex)
+        if (currentQuestion != null && !uiState.value.answerState.containsKey(currentQuestion.id)) {
+            val currentStates = uiState.value.answerState.toMutableMap()
             currentStates[currentQuestion.id] = AnswerState.SKIPPED
-            _answerState.value = currentStates
+            _uiState.update { it.copy(answerState = currentStates) }
         }
 
-        _selectedAnswer.value = null
-        _showResult.value = false
-        _isTimeUp.value = false
-        _showTimeUpDialog.value = false
+        _uiState.update { it.copy(isTimeUp = false, showTimeUpDialog = false) }
 
-        if (_currentQuestionIndex.value < _questions.value.size - 1) {
-            _currentQuestionIndex.value++
-            _isHintVisible.value = false
-            _removedOptions.value = emptySet()
+        if (uiState.value.currentIndex < uiState.value.questions.size - 1) {
+            val nextIndex = uiState.value.currentIndex + 1
+            val nextQuestionId = uiState.value.questions[nextIndex].id
+
+            _uiState.update { it.copy(
+                currentIndex = nextIndex,
+                selectedAnswer = it.selectedAnswers[nextQuestionId],
+                showResult = it.answerState.containsKey(nextQuestionId),
+                isHintVisible = false,
+                removedOptions = emptySet()
+            ) }
+
             updateSession()
             startQuestionTimer()
-        } else {
-            submitQuiz()
         }
     }
 
     fun previousQuestion() {
-        if (_currentQuestionIndex.value > 0) {
-            _currentQuestionIndex.value--
+        if (uiState.value.currentIndex > 0) {
+            val prevIndex = uiState.value.currentIndex - 1
+            val prevQuestionId = uiState.value.questions[prevIndex].id
+
+            _uiState.update { it.copy(
+                currentIndex = prevIndex,
+                selectedAnswer = it.selectedAnswers[prevQuestionId],
+                showResult = it.answerState.containsKey(prevQuestionId)
+            ) }
+
             updateSession()
             startQuestionTimer()
         }
     }
 
     fun goToQuestion(index: Int) {
-        if (index in _questions.value.indices) {
-            _currentQuestionIndex.value = index
+        if (index in uiState.value.questions.indices) {
+            val questionId = uiState.value.questions[index].id
+
+            _uiState.update { it.copy(
+                currentIndex = index,
+                selectedAnswer = it.selectedAnswers[questionId],
+                showResult = it.answerState.containsKey(questionId)
+            ) }
+
             updateSession()
             startQuestionTimer()
         }
-    }
-
-    fun updateTimeRemaining(time: Int) {
-        _timeRemaining.value = time
     }
 
     private fun updateSession() {
@@ -711,60 +701,100 @@ class QuizViewModel @Inject constructor(
         viewModelScope.launch {
             quizRepository.saveQuizSession(
                 userId = userId,
-                chapterId = currentChapterId,
+                chapterId = currentTopicId,
                 categoryId = currentCategoryId,
-                currentIndex = _currentQuestionIndex.value,
-                answers = _selectedAnswers.value,
-                questionOrder = _questions.value.map { it.id },
-                totalQuestions = _questions.value.size,
+                currentIndex = uiState.value.currentIndex,
+                answers = uiState.value.selectedAnswers,
+                questionOrder = uiState.value.questions.map { it.id },
+                totalQuestions = uiState.value.questions.size,
                 startedAt = quizStartTime
             )
         }
     }
 
     fun submitQuiz() {
-        if (_questions.value.isEmpty()) return 
-        if (isSubmitting) return 
+        if (uiState.value.questions.isEmpty()) return
+
+        if (!isAllAnswered.value) {
+            viewModelScope.launch {
+                _toastMessage.emit("Please answer all questions")
+            }
+            return
+        }
+
+        if (isSubmitting) return
         isSubmitting = true
         timerJob?.cancel()
 
         viewModelScope.launch {
-            val currentStates = _answerState.value.toMutableMap()
-            
-            _questions.value.forEach { question ->
+            val currentStates = uiState.value.answerState.toMutableMap()
+
+            uiState.value.questions.forEach { question ->
                 if (!currentStates.containsKey(question.id)) {
-                    currentStates[question.id] = AnswerState.SKIPPED
+                    currentStates[question.id] = AnswerState.UNANSWERED
                 }
             }
-            _answerState.value = currentStates
+            _uiState.update { it.copy(answerState = currentStates) }
 
             val correctCount = currentStates.values.count { it == AnswerState.CORRECT }
-            val totalQuestions = _questions.value.size
+            val wrongCount = currentStates.values.count { it == AnswerState.INCORRECT }
+            val skippedCount = currentStates.values.count { it == AnswerState.SKIPPED }
+            val unattemptedCount = currentStates.values.count { it == AnswerState.UNANSWERED }
+
+            val totalQuestions = uiState.value.questions.size
             val scorePercentage = if (totalQuestions > 0) (correctCount * 100) / totalQuestions else 0
-            
+
             var xpEarned = correctCount * 10
             if (correctCount >= 10) {
-                xpEarned += 25 
+                xpEarned += 25
             }
-            
+
             val coinsEarned = correctCount * 2
             
+            val wrongAnswersList = uiState.value.questions.mapNotNull { question ->
+                val userAnswer = uiState.value.selectedAnswers[question.id]
+                val isCorrect = userAnswer.equals(question.correctAnswer, ignoreCase = true)
+                if (!isCorrect) {
+                    AnswerResult(
+                        question = question.questionText,
+                        userAnswer = userAnswer,
+                        correctAnswer = question.correctAnswer,
+                        isCorrect = false
+                    )
+                } else null
+            }
+
             val result = QuizResult(
                 quizId = currentQuizId,
                 categoryId = currentCategoryId,
-                categoryName = currentChapterName,
+                categoryName = currentTopicName,
                 totalQuestions = totalQuestions,
                 correctAnswers = correctCount,
-                wrongAnswers = totalQuestions - correctCount,
+                wrongAnswers = wrongCount,
+                skippedAnswers = skippedCount + unattemptedCount,
                 totalScore = xpEarned,
                 maxScore = totalQuestions * 10,
                 percentage = scorePercentage.toFloat(),
+                answers = uiState.value.questions.associate { question ->
+                    val userAnswer = uiState.value.selectedAnswers[question.id] ?: ""
+                    question.id to UserAnswer(
+                        questionId = question.id,
+                        questionText = question.questionText,
+                        userAnswer = userAnswer,
+                        correctAnswer = question.correctAnswer,
+                        isCorrect = userAnswer.equals(question.correctAnswer, ignoreCase = true)
+                    )
+                },
                 completedAt = System.currentTimeMillis()
             )
-            
-            _quizResult.value = Resource.Success(result)
-            _xpAwardedInThisSession.value = xpEarned
-            
+
+            _uiState.update { it.copy(
+                quizResult = Resource.Success(result),
+                xpAwarded = xpEarned,
+                isFinished = true,
+                wrongAnswers = wrongAnswersList
+            ) }
+
             val timeTaken = (System.currentTimeMillis() - quizStartTime) / 1000
             
             checkChallengeCompletion(correctCount, totalQuestions, scorePercentage, timeTaken)
@@ -773,44 +803,67 @@ class QuizViewModel @Inject constructor(
             if (userId != null) {
                 quizRepository.saveQuizResult(userId, result)
                 storeRepository.addCoins(coinsEarned)
-                quizRepository.deleteQuizSession(userId, currentChapterId)
-                
+                quizRepository.deleteQuizSession(userId, currentTopicId)
+
+                // FEATURE: Update Topic Progress with Stars to unlock next chapter
+                if (!isDailyChallenge) {
+                    val starsEarned = when {
+                        scorePercentage >= 90 -> 3
+                        scorePercentage >= 70 -> 2
+                        scorePercentage >= 40 -> 1
+                        else -> 0
+                    }
+                    _uiState.update { it.copy(starsEarned = starsEarned) }
+                    quizRepository.updateTopicProgressWithStars(
+                        userId = userId,
+                        topicId = currentTopicId,
+                        score = xpEarned,
+                        stars = starsEarned,
+                        totalQuestions = totalQuestions,
+                        percentage = scorePercentage
+                    )
+                    // Refresh progress locally
+                    restoreTopicProgress(userId)
+                }
+
                 // Achievement Progress Tracking
                 val userResult = quizRepository.getUserProfile(userId)
                 if (userResult is Resource.Success) {
                     var user = userResult.data!!
-                    
-                    // 🎯 Quiz count
                     user = achievementManager.updateProgress(user, "quiz", 1)
-                    
-                    // 🏆 Perfect Score
                     if (correctCount == totalQuestions) {
                         user = achievementManager.updateProgress(user, "skill", 1)
                     }
-                    
-                    // ⚡ Speed Master
                     if (timeTaken <= 60 && totalQuestions >= 5) {
                         user = achievementManager.updateProgress(user, "skill", 1)
                     }
-                    
-                    // 💰 Economy
                     user = achievementManager.updateProgress(user, "economy", coinsEarned)
-                    
-                    // Sync to Firestore
                     quizRepository.updateUserAchievements(userId, user.achievements)
                 }
             }
         }
     }
 
+    fun getAnswerResults(): List<AnswerResult> {
+        return uiState.value.questions.map { question ->
+            val userAnswer = uiState.value.selectedAnswers[question.id]
+            AnswerResult(
+                question = question.questionText,
+                userAnswer = userAnswer,
+                correctAnswer = question.correctAnswer,
+                isCorrect = userAnswer.equals(question.correctAnswer, ignoreCase = true)
+            )
+        }
+    }
+
     private suspend fun checkChallengeCompletion(score: Int, total: Int, percentage: Int, timeTaken: Long) {
-        if (isDailyChallenge && currentChapterId == "daily" && total >= 10) {
+        if (isDailyChallenge && currentTopicId == "daily" && total >= 10) {
             dailyChallengeManager.completeChallenge("daily", 25, 10)
         }
-        if (isDailyChallenge && currentChapterId == "speed" && timeTaken <= 60) {
+        if (isDailyChallenge && currentTopicId == "speed" && timeTaken <= 60) {
             dailyChallengeManager.completeChallenge("speed", 30, 15)
         }
-        if (isDailyChallenge && currentChapterId == "accuracy" && percentage == 100) {
+        if (isDailyChallenge && currentTopicId == "accuracy" && percentage == 100) {
             dailyChallengeManager.completeChallenge("accuracy", 40, 20)
         }
         if (!isDailyChallenge) {
@@ -831,7 +884,7 @@ class QuizViewModel @Inject constructor(
                     options = question.options,
                     correctAnswer = question.correctAnswer,
                     explanation = question.explanation,
-                    topicName = currentChapterName,
+                    topicName = currentTopicName,
                     categoryName = currentCategoryId
                 ))
                 _toastMessage.emit("Added to bookmark")
@@ -844,9 +897,10 @@ class QuizViewModel @Inject constructor(
     }
 
     fun resumeQuiz() {
+        _uiState.update { it.copy(showResult = false, selectedAnswer = null) }
         _showResumeDialog.value = false
         viewModelScope.launch {
-            fetchQuestions(currentChapterId, isResuming = true)
+            fetchQuestions(currentTopicId, isResuming = true)
         }
     }
 
@@ -855,10 +909,24 @@ class QuizViewModel @Inject constructor(
         val userId = FirebaseAuth.getInstance().currentUser?.uid
         viewModelScope.launch {
             if (userId != null) {
-                quizRepository.deleteQuizSession(userId, currentChapterId)
+                quizRepository.deleteQuizSession(userId, currentTopicId)
             }
             resetQuizState()
-            loadQuestions(currentCategoryId, currentChapterId, currentChapterName)
+            loadQuestions(currentCategoryId, currentTopicId, currentTopicName)
+        }
+    }
+
+    fun retryQuiz() {
+        _showResumeDialog.value = false
+        resetQuizState() // CLEAR STATE SYNCHRONOUSLY
+
+        val userId = FirebaseAuth.getInstance().currentUser?.uid
+        viewModelScope.launch {
+            if (userId != null) {
+                quizRepository.deleteQuizSession(userId, currentTopicId)
+            }
+            // Start fresh
+            loadQuestions(currentCategoryId, currentTopicId, currentTopicName)
         }
     }
 }

@@ -587,4 +587,29 @@ class QuizRepository @Inject constructor(
             Resource.Error(e.message ?: "Failed to update last progress")
         }
     }
+
+    // ========== ANSWERED QUESTIONS TRACKING ==========
+
+    suspend fun isQuestionAnsweredCorrectly(userId: String, questionId: String): Boolean {
+        return try {
+            val doc = usersCollection.document(userId)
+                .collection("answeredQuestions").document(questionId).get().await()
+            doc.exists() && (doc.getBoolean("isCorrect") ?: false)
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    suspend fun markQuestionAsAnswered(userId: String, questionId: String, isCorrect: Boolean) {
+        try {
+            val data = mapOf(
+                "isCorrect" to isCorrect,
+                "answeredAt" to FieldValue.serverTimestamp()
+            )
+            usersCollection.document(userId)
+                .collection("answeredQuestions").document(questionId).set(data).await()
+        } catch (e: Exception) {
+            // Handle error silently or log
+        }
+    }
 }

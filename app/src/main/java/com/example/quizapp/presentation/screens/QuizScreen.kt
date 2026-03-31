@@ -6,8 +6,11 @@ import androidx.compose.animation.*
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -76,6 +79,7 @@ fun QuizScreen(
     val isBookmarked by quizViewModel.isBookmarked.collectAsStateWithLifecycle()
     val showResumeDialog by quizViewModel.showResumeDialog.collectAsStateWithLifecycle()
     val resumeMessage by quizViewModel.resumeMessage.collectAsStateWithLifecycle()
+    val isAllAnswered by quizViewModel.isAllAnswered.collectAsStateWithLifecycle()
     
     val selectedAnswer by quizViewModel.selectedAnswer.collectAsStateWithLifecycle()
     val showResult by quizViewModel.showResult.collectAsStateWithLifecycle()
@@ -89,24 +93,20 @@ fun QuizScreen(
     var showExitDialog by remember { mutableStateOf(false) }
     var showSubmitDialog by remember { mutableStateOf(false) }
     
-    // Achievement Unlock logic
     var unlockedAchievement by remember { mutableStateOf<Achievement?>(null) }
 
-    // 🔥 Ultra Premium: Background Blur logic
     val shouldBlur = showTimeUpDialog || showExitDialog || showSubmitDialog || showResumeDialog || unlockedAchievement != null
 
     LaunchedEffect(categoryId, topicId, topicName) {
         quizViewModel.loadQuestions(categoryId, topicId, topicName)
     }
 
-    // 🔥 Added: Observe bookmark toast messages
     LaunchedEffect(Unit) {
         quizViewModel.toastMessage.collect { message ->
             Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
         }
     }
     
-    // Observe Achievement Events
     LaunchedEffect(Unit) {
         quizViewModel.achievementEvent.collect { achievement ->
             unlockedAchievement = achievement
@@ -134,7 +134,7 @@ fun QuizScreen(
                 val errorMessage = result.message ?: "An unknown error occurred."
                 Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
             }
-            else -> { /* Loading or null */ }
+            else -> { }
         }
     }
 
@@ -196,14 +196,12 @@ fun QuizScreen(
             )
         }
     ) { paddingValues ->
-        // 🔥 Ultra Premium: Blur effect on content
         Box(modifier = Modifier
             .fillMaxSize()
             .padding(paddingValues)
             .blur(if (shouldBlur) 10.dp else 0.dp)
         ) {
             if (isLoading) {
-                // 🔥 Ultra Smooth: Shimmer Loading
                 QuestionShimmer()
             } else if (error != null) {
                 Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -227,7 +225,6 @@ fun QuizScreen(
                     Text("No questions available for this category.")
                 }
             } else {
-                // 🔥 Fade in content
                 AnimatedVisibility(
                     visible = true,
                     enter = fadeIn(tween(500))
@@ -249,7 +246,6 @@ fun QuizScreen(
                                 fontWeight = FontWeight.Medium
                             )
                             
-                            // 🔥 Ultra Premium: Pulsating Timer
                             TimerComponent(timeRemaining = timeRemaining)
                         }
                         
@@ -291,7 +287,6 @@ fun QuizScreen(
                         val currentQuestion = questions.getOrNull(currentIndex)
 
                         if (currentQuestion != null) {
-                            // 🔥 FIX: Use key(currentQuestion.id) to reset internal states (like animations) when switching questions
                             key(currentQuestion.id) {
                                 QuestionCard(
                                     question = currentQuestion,
@@ -331,31 +326,32 @@ fun QuizScreen(
                             
                             val isLastQuestion = currentIndex == questions.size - 1
                             
-                            Button(
-                                onClick = {
-                                    if (!isLastQuestion) {
-                                        quizViewModel.nextQuestion()
-                                    } else {
-                                        showSubmitDialog = true
-                                    }
-                                },
-                                enabled = true,
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                Text(if (isLastQuestion) "Submit" else "Next")
-                                Spacer(Modifier.width(8.dp))
-                                Icon(
-                                    if (isLastQuestion) Icons.Default.Check else Icons.Default.ArrowForward,
-                                    null,
-                                    Modifier.size(20.dp)
-                                )
+                            if (isLastQuestion) {
+                                Button(
+                                    onClick = { showSubmitDialog = true },
+                                    enabled = isAllAnswered,
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Submit")
+                                    Spacer(Modifier.width(8.dp))
+                                    Icon(Icons.Default.Check, null, Modifier.size(20.dp))
+                                }
+                            } else {
+                                Button(
+                                    onClick = { quizViewModel.nextQuestion() },
+                                    modifier = Modifier.weight(1f)
+                                ) {
+                                    Text("Next")
+                                    Spacer(Modifier.width(8.dp))
+                                    Icon(Icons.Default.ArrowForward, null, Modifier.size(20.dp))
+                                }
                             }
                         }
                         Spacer(Modifier.height(16.dp))
                         QuestionNavigator(
                             questions = questions,
                             currentIndex = currentIndex,
-                            answeredQuestionIds = selectedAnswers.keys,
+                            selectedAnswers = selectedAnswers,
                             onQuestionClick = { index -> 
                                  quizViewModel.goToQuestion(index) 
                             }
@@ -365,7 +361,6 @@ fun QuizScreen(
             }
         }
 
-        // 🔥 Overlays outside the blur box
         if (showTimeUpDialog) {
             TimeUpFeedback(
                 explanation = questions.getOrNull(currentIndex)?.explanation ?: "",
@@ -417,7 +412,6 @@ fun QuizScreen(
             )
         }
         
-        // Achievement Unlock Dialog
         unlockedAchievement?.let { achievement ->
             AchievementUnlockDialog(
                 achievement = achievement,
@@ -454,13 +448,10 @@ fun QuestionShimmer() {
 
     Column(modifier = Modifier.padding(16.dp).fillMaxSize()) {
         Spacer(modifier = Modifier.height(20.dp))
-        // Progress bar shimmer
         Box(modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)).background(brush))
         Spacer(modifier = Modifier.height(40.dp))
-        // Question card shimmer
         Box(modifier = Modifier.fillMaxWidth().height(200.dp).clip(RoundedCornerShape(24.dp)).background(brush))
         Spacer(modifier = Modifier.height(24.dp))
-        // Options shimmer
         repeat(4) {
             Box(modifier = Modifier.fillMaxWidth().height(60.dp).clip(RoundedCornerShape(16.dp)).background(brush))
             Spacer(modifier = Modifier.height(14.dp))
@@ -553,7 +544,6 @@ fun TimeUpFeedback(explanation: String, onNext: () -> Unit) {
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.padding(32.dp)
             ) {
-                // 🔥 Icon with animation
                 val iconScale by rememberInfiniteTransition(label = "").animateFloat(
                     initialValue = 1f,
                     targetValue = 1.1f,
@@ -752,7 +742,6 @@ fun QuestionCard(
                             val isCorrectOption = option.equals(question.correctAnswer, ignoreCase = true)
                             val optionLabel = ('A' + index).toString()
                             
-                            // 🔥 FIX: Use key(option) to ensure state is fresh for each option
                             key(option) {
                                 AnswerOption(
                                     text = option,
@@ -818,9 +807,9 @@ fun AnswerOption(
 ) {
     val backgroundColor by animateColorAsState(
         targetValue = when {
+            isSelected && showResult -> if (isCorrect) CorrectGreen.copy(alpha = 0.2f) else IncorrectRed.copy(alpha = 0.2f)
+            isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
             showResult && isCorrect -> CorrectGreen.copy(alpha = 0.2f)
-            showResult && isSelected && !isCorrect -> IncorrectRed.copy(alpha = 0.2f)
-            isSelected && !showResult -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
             else -> MaterialTheme.colorScheme.surface
         },
         animationSpec = tween(400),
@@ -829,9 +818,9 @@ fun AnswerOption(
 
     val borderColor by animateColorAsState(
         targetValue = when {
+            isSelected && showResult -> if (isCorrect) CorrectGreen else IncorrectRed
+            isSelected -> MaterialTheme.colorScheme.primary
             showResult && isCorrect -> CorrectGreen
-            showResult && isSelected && !isCorrect -> IncorrectRed
-            isSelected && !showResult -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
         },
         animationSpec = tween(400),
@@ -848,9 +837,9 @@ fun AnswerOption(
 
     val labelBackgroundColor by animateColorAsState(
         targetValue = when {
+            isSelected && showResult -> if (isCorrect) CorrectGreen else IncorrectRed
+            isSelected -> MaterialTheme.colorScheme.primary
             showResult && isCorrect -> CorrectGreen
-            showResult && isSelected && !isCorrect -> IncorrectRed
-            isSelected && !showResult -> MaterialTheme.colorScheme.primary
             else -> MaterialTheme.colorScheme.surfaceVariant
         },
         animationSpec = tween(400),
@@ -966,40 +955,48 @@ fun ExplanationBox(answerState: AnswerState, explanation: String, isTimeUp: Bool
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun QuestionNavigator(
     questions: List<Question>,
     currentIndex: Int,
-    answeredQuestionIds: Set<String>,
+    selectedAnswers: Map<String, String>,
     onQuestionClick: (Int) -> Unit
 ) {
-    Row(
-        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    val listState = rememberLazyListState()
+
+    LaunchedEffect(currentIndex) {
+        listState.animateScrollToItem(currentIndex)
+    }
+
+    LazyRow(
+        state = listState,
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        contentPadding = PaddingValues(horizontal = 4.dp)
     ) {
-        questions.forEachIndexed { index, question ->
-            val isAnswered = answeredQuestionIds.contains(question.id)
+        itemsIndexed(questions) { index, question ->
             val isSelected = index == currentIndex
+            val isAnswered = selectedAnswers.containsKey(question.id)
 
-            val color = when {
-                isSelected -> MaterialTheme.colorScheme.primary
-                isAnswered -> CorrectGreen.copy(alpha = 0.8f)
-                else -> MaterialTheme.colorScheme.surfaceVariant
-            }
-
-            val textColor = if (isSelected || isAnswered) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-
-            Surface(
-                onClick = { onQuestionClick(index) },
-                color = color,
-                shape = RoundedCornerShape(10.dp),
-                modifier = Modifier.size(44.dp),
-                shadowElevation = if (isSelected) 4.dp else 0.dp
+            Box(
+                modifier = Modifier
+                    .size(44.dp)
+                    .background(
+                        color = when {
+                            isSelected -> MaterialTheme.colorScheme.primary
+                            isAnswered -> CorrectGreen
+                            else -> MaterialTheme.colorScheme.error.copy(alpha = 0.6f)
+                        },
+                        shape = CircleShape
+                    )
+                    .clickable { onQuestionClick(index) },
+                contentAlignment = Alignment.Center
             ) {
-                Box(contentAlignment = Alignment.Center) {
-                    Text(text = (index + 1).toString(), color = textColor, fontWeight = FontWeight.Black)
-                }
+                Text(
+                    text = "${index + 1}",
+                    color = Color.White,
+                    fontWeight = FontWeight.Black
+                )
             }
         }
     }

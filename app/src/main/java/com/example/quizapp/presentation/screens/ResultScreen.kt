@@ -1,12 +1,15 @@
 package com.example.quizapp.presentation.screens
 
 import android.app.Activity
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.*
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,6 +28,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.example.quizapp.presentation.viewmodel.AnswerResult
 import com.example.quizapp.presentation.viewmodel.QuizViewModel
 import com.example.quizapp.presentation.viewmodel.UserViewModel
 import com.example.quizapp.ui.theme.CorrectGreen
@@ -32,23 +36,22 @@ import com.example.quizapp.ui.theme.GradientEnd
 import com.example.quizapp.ui.theme.GradientStart
 import com.example.quizapp.ui.theme.IncorrectRed
 import com.example.quizapp.util.Resource
-import com.example.quizapp.util.formatTime
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultScreen(
     onNavigateToHome: () -> Unit,
-    onNavigateToHistory: () -> Unit,
+    onRetryQuiz: () -> Unit,
     quizViewModel: QuizViewModel = hiltViewModel(),
     userViewModel: UserViewModel = hiltViewModel()
 ) {
     val quizResult by quizViewModel.quizResult.collectAsState()
     val xpAwarded by quizViewModel.xpAwardedInThisSession.collectAsState()
-    val isPreviouslyCompleted by quizViewModel.isPreviouslyCompleted.collectAsState()
+    val starsEarned by quizViewModel.stars.collectAsState()
+    val wrongAnswers by quizViewModel.wrongAnswers.collectAsState()
     val context = LocalContext.current
 
-    // Animation
     val scale = remember { Animatable(0f) }
 
     LaunchedEffect(Unit) {
@@ -81,10 +84,6 @@ fun ResultScreen(
             is Resource.Success -> {
                 val result = (quizResult as Resource.Success).data!!
                 
-                val wrongAnswersForReview = result.answers.filter { (_, answer) ->
-                    !answer.isCorrect && answer.userAnswer.isNotEmpty()
-                }.toList()
-
                 LazyColumn(
                     modifier = Modifier
                         .fillMaxSize()
@@ -137,6 +136,24 @@ fun ResultScreen(
                                         color = Color.White
                                     )
 
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    
+                                    // Display Stars Earned
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    ) {
+                                        repeat(3) { index ->
+                                            Icon(
+                                                imageVector = if (index < starsEarned) Icons.Default.Star else Icons.Default.StarBorder,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(36.dp),
+                                                tint = if (index < starsEarned) Color(0xFFFFC107) else Color.White.copy(alpha = 0.3f)
+                                            )
+                                        }
+                                    }
+
                                     if (xpAwarded != null && xpAwarded!! > 0) {
                                         Spacer(modifier = Modifier.height(8.dp))
                                         Surface(
@@ -150,14 +167,6 @@ fun ResultScreen(
                                                 fontWeight = FontWeight.Bold
                                             )
                                         }
-                                    } else if (isPreviouslyCompleted) {
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = "You already completed this quiz. XP was already awarded.",
-                                            color = Color.White.copy(alpha = 0.8f),
-                                            fontSize = 12.sp,
-                                            textAlign = TextAlign.Center
-                                        )
                                     }
 
                                     Spacer(modifier = Modifier.height(16.dp))
@@ -181,7 +190,6 @@ fun ResultScreen(
                         }
                     }
 
-                    // Feature 7: Watch Ad to earn extra coins
                     item {
                         Card(
                             modifier = Modifier
@@ -252,77 +260,64 @@ fun ResultScreen(
                                     StatItem(
                                         icon = Icons.Default.HelpOutline,
                                         value = result.skippedAnswers.toString(),
-                                        label = "Not Attempted",
+                                        label = "Skipped",
                                         color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
-                                }
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Divider()
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = "Time Taken",
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            text = formatTime(result.timeTaken),
-                                            fontSize = 18.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-
-                                    Column(
-                                        horizontalAlignment = Alignment.End
-                                    ) {
-                                        Text(
-                                            text = "Category",
-                                            fontSize = 14.sp,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                                        )
-                                        Text(
-                                            text = result.categoryName.ifEmpty { "General" },
-                                            fontSize = 18.sp,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
                                 }
                             }
                         }
                     }
 
-                    if (wrongAnswersForReview.isNotEmpty()) {
+                    if (wrongAnswers.isNotEmpty()) {
                         item {
                             Text(
                                 text = "Review Wrong Answers",
                                 fontSize = 20.sp,
                                 fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(vertical = 8.dp)
+                                modifier = Modifier.padding(top = 8.dp)
                             )
                         }
 
-                        items(wrongAnswersForReview) { (key, answer) ->
-                            AnswerReviewCard(
-                                questionNumber = key.toInt() + 1,
-                                answer = answer
-                            )
+                        itemsIndexed(wrongAnswers) { index, item ->
+                            val animationDelay = index * 100
+                            var visible by remember { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                delay(animationDelay.toLong())
+                                visible = true
+                            }
+                            
+                            AnimatedVisibility(
+                                visible = visible,
+                                enter = fadeIn() + slideInVertically(initialOffsetY = { 50 })
+                            ) {
+                                WrongAnswerCard(item, index + 1)
+                            }
+                        }
+                    } else {
+                        item {
+                            EmptyStatePerfectScore()
                         }
                     }
 
                     item {
                         Column(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 16.dp),
                             verticalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
                             Button(
+                                onClick = { onRetryQuiz() },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(56.dp),
+                                shape = RoundedCornerShape(12.dp),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Retry Quiz", fontSize = 16.sp, fontWeight = FontWeight.Bold)
+                            }
+
+                            OutlinedButton(
                                 onClick = {
                                     quizViewModel.resetQuiz()
                                     onNavigateToHome()
@@ -332,56 +327,144 @@ fun ResultScreen(
                                     .height(56.dp),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Icon(
-                                    imageVector = Icons.Default.Home,
-                                    contentDescription = null
-                                )
+                                Icon(Icons.Default.Home, contentDescription = null)
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Text("Back to Home", fontSize = 16.sp)
                             }
-
-                            OutlinedButton(
-                                onClick = {
-                                    quizViewModel.resetQuiz()
-                                    onNavigateToHistory()
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .height(56.dp),
-                                shape = RoundedCornerShape(12.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.History,
-                                    contentDescription = null
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("View History", fontSize = 16.sp)
-                            }
                         }
                     }
+                    
+                    item { Spacer(modifier = Modifier.height(24.dp)) }
                 }
             }
             is Resource.Loading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     CircularProgressIndicator()
                 }
             }
             else -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(paddingValues),
-                    contentAlignment = Alignment.Center
-                ) {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                     Text("No result available")
                 }
             }
         }
+    }
+}
+
+@Composable
+fun WrongAnswerCard(item: AnswerResult, questionNumber: Int) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        shape = RoundedCornerShape(16.dp),
+        elevation = CardDefaults.cardElevation(2.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFFFEBEE) // Light pink/red background
+        )
+    ) {
+        Column(
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    modifier = Modifier
+                        .size(24.dp)
+                        .clip(CircleShape)
+                        .background(Color.Red),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Close,
+                        contentDescription = null,
+                        modifier = Modifier.size(16.dp),
+                        tint = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.width(12.dp))
+                Text(
+                    text = "Question $questionNumber",
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = Color.Black
+                )
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Text(
+                text = item.question,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
+                lineHeight = 22.sp
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.White.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                    .padding(12.dp)
+            ) {
+                Text(
+                    text = "Your Answer: ${item.userAnswer ?: "Skipped"}",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = Color(0xFFD32F2F) // Darker Red for visibility
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Correct Answer: ${item.correctAnswer}",
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF388E3C) // Darker Green for visibility
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun EmptyStatePerfectScore() {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 32.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Box(
+            modifier = Modifier
+                .size(80.dp)
+                .clip(CircleShape)
+                .background(Color(0xFFE8F5E9)),
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.CheckCircle,
+                contentDescription = null,
+                modifier = Modifier.size(60.dp),
+                tint = Color(0xFF4CAF50)
+            )
+        }
+        
+        Spacer(modifier = Modifier.height(16.dp))
+        
+        Text(
+            text = "Perfect Score! 🎉",
+            fontSize = 24.sp,
+            fontWeight = FontWeight.Bold,
+            color = MaterialTheme.colorScheme.primary
+        )
+        
+        Text(
+            text = "You got everything right. No mistakes!",
+            fontSize = 16.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
     }
 }
 
@@ -398,13 +481,13 @@ fun StatItem(
         Icon(
             imageVector = icon,
             contentDescription = null,
-            modifier = Modifier.size(40.dp),
+            modifier = Modifier.size(32.dp),
             tint = color
         )
-        Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = value,
-            fontSize = 24.sp,
+            fontSize = 20.sp,
             fontWeight = FontWeight.Bold,
             color = color
         )
@@ -413,90 +496,5 @@ fun StatItem(
             fontSize = 12.sp,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-    }
-}
-
-@Composable
-fun AnswerReviewCard(
-    questionNumber: Int,
-    answer: com.example.quizapp.data.model.UserAnswer
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = IncorrectRed.copy(alpha = 0.1f)
-        )
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Box(
-                    modifier = Modifier
-                        .size(32.dp)
-                        .clip(CircleShape)
-                        .background(IncorrectRed),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Close,
-                        contentDescription = null,
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(12.dp))
-
-                Text(
-                    text = "Question $questionNumber",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp
-                )
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            Text(
-                text = answer.questionText,
-                fontSize = 14.sp,
-                lineHeight = 20.sp
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            if (answer.userAnswer.isNotEmpty()) {
-                Row {
-                    Text(
-                        text = "Your Answer: ",
-                        fontSize = 14.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Text(
-                        text = answer.userAnswer,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(4.dp))
-
-            Row {
-                Text(
-                    text = "Correct Answer: ",
-                    fontSize = 14.sp,
-                    color = CorrectGreen
-                )
-                Text(
-                    text = answer.correctAnswer,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
     }
 }
