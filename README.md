@@ -60,6 +60,27 @@ presentation/  → UI + ViewModels
 util/          → helper classes  
 
 
+## 📸 Screenshots
+
+### 🏠 Home Screen
+![Home](screenshots/home_screen.png)
+
+### 📚 Chapter Selection
+![Chapter](screenshots/chapter_screen.png)
+
+### ❓ Quiz Screen
+![Quiz](screenshots/quiz_screen.png)
+
+### 🏆 Leaderboard
+![Leaderboard](screenshots/leaderboard_screen.png)
+
+### 🎯 Achievements
+![Achievements](screenshots/achievements_screen.png)
+
+### 👤 Profile
+![Profile](screenshots/user_profile.png)
+
+
 Setup :- 
 git clone https://github.com/mddanisheqbal/Quiz-App
 Then:
