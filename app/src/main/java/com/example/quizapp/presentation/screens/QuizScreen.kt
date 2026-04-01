@@ -7,6 +7,8 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -66,6 +68,7 @@ fun QuizScreen(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val haptic = LocalHapticFeedback.current
+    val scope = rememberCoroutineScope()
     
     val questions by quizViewModel.questions.collectAsStateWithLifecycle()
     val isLoading by quizViewModel.isLoading.collectAsStateWithLifecycle()
@@ -299,8 +302,14 @@ fun QuizScreen(
                                     isHintVisible = isHintVisible,
                                     removedOptions = removedOptions,
                                     onAnswerSelected = { answer ->
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
-                                        quizViewModel.onAnswerSelected(answer)
+                                        // Trigger strong haptic immediately to match skip/hint buttons
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        // Visual highlight Step 1
+                                        quizViewModel.selectAnswer(answer)
+                                        scope.launch {
+                                            delay(250) // Step 2: Delay for premium feel
+                                            quizViewModel.onAnswerSelected(answer) // Step 3: Reveal Result
+                                        }
                                     },
                                     onBookmarkToggle = {
                                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -805,44 +814,52 @@ fun AnswerOption(
     showResult: Boolean,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+
     val backgroundColor by animateColorAsState(
         targetValue = when {
-            isSelected && showResult -> if (isCorrect) CorrectGreen.copy(alpha = 0.2f) else IncorrectRed.copy(alpha = 0.2f)
-            isSelected -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+            isSelected -> if (isCorrect) CorrectGreen.copy(alpha = 0.2f) else IncorrectRed.copy(alpha = 0.2f)
             showResult && isCorrect -> CorrectGreen.copy(alpha = 0.2f)
+            isPressed -> MaterialTheme.colorScheme.surfaceVariant
             else -> MaterialTheme.colorScheme.surface
         },
-        animationSpec = tween(400),
+        animationSpec = tween(300),
         label = ""
     )
 
     val borderColor by animateColorAsState(
         targetValue = when {
-            isSelected && showResult -> if (isCorrect) CorrectGreen else IncorrectRed
-            isSelected -> MaterialTheme.colorScheme.primary
+            isSelected -> if (isCorrect) CorrectGreen else IncorrectRed
             showResult && isCorrect -> CorrectGreen
             else -> MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
         },
-        animationSpec = tween(400),
+        animationSpec = tween(300),
         label = ""
     )
 
     val scale by animateFloatAsState(
-        targetValue = if (isSelected) 1.04f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
-        label = ""
+        targetValue = when {
+            isPressed -> 0.96f
+            isSelected -> 1.02f
+            else -> 1f
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessLow
+        ),
+        label = "scale"
     )
 
     val borderWidth = if (isSelected || (showResult && isCorrect)) 2.5.dp else 1.dp
 
     val labelBackgroundColor by animateColorAsState(
         targetValue = when {
-            isSelected && showResult -> if (isCorrect) CorrectGreen else IncorrectRed
-            isSelected -> MaterialTheme.colorScheme.primary
+            isSelected -> if (isCorrect) CorrectGreen else IncorrectRed
             showResult && isCorrect -> CorrectGreen
             else -> MaterialTheme.colorScheme.surfaceVariant
         },
-        animationSpec = tween(400),
+        animationSpec = tween(300),
         label = ""
     )
 
@@ -855,8 +872,9 @@ fun AnswerOption(
         colors = CardDefaults.outlinedCardColors(containerColor = backgroundColor),
         border = BorderStroke(borderWidth, borderColor),
         shape = RoundedCornerShape(16.dp),
-        enabled = !showResult,
-        elevation = CardDefaults.cardElevation(if (isSelected) 4.dp else 0.dp)
+        enabled = !isAnswered && !showResult,
+        interactionSource = interactionSource,
+        elevation = CardDefaults.cardElevation(if (isSelected || isPressed) 6.dp else 0.dp)
     ) {
         Row(
             modifier = Modifier.padding(18.dp).fillMaxWidth(),
@@ -864,12 +882,12 @@ fun AnswerOption(
         ) {
             Surface(
                 color = labelBackgroundColor,
-                shape = RoundedCornerShape(6.dp)
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
                     text = optionLabel,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                    fontSize = 14.sp,
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.Black,
                     color = if (labelBackgroundColor == MaterialTheme.colorScheme.surfaceVariant) MaterialTheme.colorScheme.onSurfaceVariant else Color.White
                 )

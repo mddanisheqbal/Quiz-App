@@ -608,6 +608,11 @@ class QuizViewModel @Inject constructor(
         goToNextAfterTimeUp()
     }
 
+    fun selectAnswer(answer: String) {
+        if (uiState.value.showResult || uiState.value.isTimeUp || uiState.value.showTimeUpDialog) return
+        _uiState.update { it.copy(selectedAnswer = answer) }
+    }
+
     fun onAnswerSelected(answer: String) {
         if (uiState.value.showResult || uiState.value.isTimeUp || uiState.value.showTimeUpDialog) return
 
@@ -699,14 +704,15 @@ class QuizViewModel @Inject constructor(
 
         val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
         viewModelScope.launch {
+            val questionsList = _uiState.value.questions
             quizRepository.saveQuizSession(
                 userId = userId,
                 chapterId = currentTopicId,
                 categoryId = currentCategoryId,
-                currentIndex = uiState.value.currentIndex,
-                answers = uiState.value.selectedAnswers,
-                questionOrder = uiState.value.questions.map { it.id },
-                totalQuestions = uiState.value.questions.size,
+                currentIndex = _uiState.value.currentIndex,
+                answers = _uiState.value.selectedAnswers,
+                questionOrder = questionsList.map { it.id },
+                totalQuestions = questionsList.size,
                 startedAt = quizStartTime
             )
         }
